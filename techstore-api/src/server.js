@@ -23,6 +23,9 @@ const PORT      = process.env.PORT || 3001
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const isProd    = process.env.NODE_ENV === 'production'
 
+// ─── Trust proxy (necesario para Vercel y rate limiting) ─────────────────────
+app.set('trust proxy', 1)
+
 // ─── 1. Helmet — headers HTTP de seguridad ────────────────────────────────────
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
 
