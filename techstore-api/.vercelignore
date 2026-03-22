@@ -1,0 +1,4 @@
+# Ignorar archivos sensibles en Vercel
+.env
+.env.local
+.env.production
