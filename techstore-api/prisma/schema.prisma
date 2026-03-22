@@ -1,0 +1,162 @@
+// ─── CONFIGURACIÓN ───────────────────────────────────────────────────────────
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── MODELOS ──────────────────────────────────────────────────────────────────
+
+// Usuario del sistema
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String                        // Hash bcrypt — nunca plain text
+  name      String
+  phone     String?
+  birthDate DateTime?
+  role      Role     @default(CUSTOMER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relaciones
+  addresses Address[]
+  orders    Order[]
+  favorites Favorite[]
+
+  @@map("users")
+}
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+// Dirección de envío del usuario
+model Address {
+  id         String  @id @default(cuid())
+  userId     String
+  label      String  @default("Casa")       // "Casa", "Trabajo", etc.
+  fullName   String
+  address    String
+  city       String
+  postalCode String?
+  country    String  @default("Colombia")
+  isDefault  Boolean @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("addresses")
+}
+
+// Categoría de producto
+model Category {
+  id       String    @id @default(cuid())
+  name     String    @unique              // "Tarjetas de Video", "Procesadores", etc.
+  slug     String    @unique              // "tarjetas-de-video"
+  image    String?
+
+  products Product[]
+
+  @@map("categories")
+}
+
+// Producto del catálogo
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  brand       String
+  description String
+  price       Decimal  @db.Decimal(10, 2)
+  oldPrice    Decimal? @db.Decimal(10, 2)  // Precio tachado (oferta)
+  stock       Int      @default(0)
+  image       String?
+  badge       String?                       // "NEW", "HOT", "-15%"
+  badgeColor  String?                       // Clase Tailwind del badge
+  rating      Decimal  @default(0) @db.Decimal(3, 1)
+  reviews     Int      @default(0)
+  specs       Json     @default("[]")       // Array de strings: ["16GB", "PCIe 4.0"]
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
+
+  orderItems  OrderItem[]
+  favorites   Favorite[]
+
+  @@map("products")
+}
+
+// Pedido
+model Order {
+  id             String      @id @default(cuid())
+  orderNumber    String      @unique   // "TS-ABC123"
+  userId         String
+  status         OrderStatus @default(RECEIVED)
+  paymentMethod  String      @default("card")
+
+  // Totales (guardados al momento del pago — precios pueden cambiar después)
+  subtotal       Decimal     @db.Decimal(10, 2)
+  discount       Decimal     @default(0) @db.Decimal(10, 2)
+  tax            Decimal     @db.Decimal(10, 2)
+  shipping       Decimal     @db.Decimal(10, 2)
+  total          Decimal     @db.Decimal(10, 2)
+  promoCode      String?
+
+  // Dirección de envío (snapshot — no FK para que no cambie si el user edita su dirección)
+  shippingName      String
+  shippingAddress   String
+  shippingCity      String
+  shippingPostalCode String?
+  shippingCountry   String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user  User        @relation(fields: [userId], references: [id])
+  items OrderItem[]
+
+  @@map("orders")
+}
+
+enum OrderStatus {
+  RECEIVED          // Pedido recibido
+  PAYMENT_CONFIRMED // Pago confirmado
+  PREPARING         // Preparando envío
+  SHIPPED           // En camino
+  DELIVERED         // Entregado
+  CANCELLED         // Cancelado
+}
+
+// Item individual dentro de un pedido
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  productId String
+  qty       Int
+  unitPrice Decimal @db.Decimal(10, 2)   // Precio al momento de compra
+
+  order   Order   @relation(fields: [orderId],   references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+// Producto favorito del usuario
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  productId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId],    references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])          // Un usuario no puede favoritear el mismo producto dos veces
+  @@map("favorites")
+}
