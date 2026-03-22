@@ -12,3 +12,5 @@ uploads/products/*.png
 uploads/products/*.gif
 # Mantener la carpeta vacía en Git
 !uploads/products/.gitkeep
+
+.vercel
