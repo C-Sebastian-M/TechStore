@@ -72,11 +72,15 @@ app.use(notFound)
 app.use(errorHandler)
 
 // ─── Inicio ──────────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`\n🚀  TechStore API → http://localhost:${PORT}`)
-  console.log(`📋  Entorno  : ${process.env.NODE_ENV || 'development'}`)
-  console.log(`🔗  CORS     : ${allowedOrigin}`)
-  console.log(`🛡️   Helmet   : activo | Rate limiting: activo`)
-  console.log(`📁  Features : admin · users · contact · upload (extraídos)`)
-  console.log(`📁  Features : auth · products · orders (barrel re-exports)\n`)
-})
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`\n🚀  TechStore API → http://localhost:${PORT}`)
+    console.log(`📋  Entorno  : ${process.env.NODE_ENV || 'development'}`)
+    console.log(`🔗  CORS     : ${allowedOrigin}`)
+    console.log(`🛡️   Helmet   : activo | Rate limiting: activo`)
+    console.log(`📁  Features : admin · users · contact · upload (extraídos)`)
+    console.log(`📁  Features : auth · products · orders (barrel re-exports)`)
+  })
+}
+
+export default app;
