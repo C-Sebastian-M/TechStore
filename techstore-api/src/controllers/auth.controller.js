@@ -1,4 +1,5 @@
 import * as authService from '../services/auth.service.js'
+import { setAuthCookie } from '../services/auth.service.js'
 import {
   registerSchema,
   verifyCodeSchema,
@@ -21,27 +22,30 @@ export async function register(req, res, next) {
 // ─── POST /api/auth/verify-email — Paso 2: verificar y crear cuenta ──────────
 export async function verifyEmail(req, res, next) {
   try {
-    const data   = verifyCodeSchema.parse(req.body)
-    const result = await authService.verifyCodeAndRegister(data)
-    res.status(201).json(result)
+    const data           = verifyCodeSchema.parse(req.body)
+    const { user, token } = await authService.verifyCodeAndRegister(data)
+    setAuthCookie(res, token)
+    res.status(201).json({ user, token })
   } catch (err) { next(err) }
 }
 
 // ─── POST /api/auth/login ─────────────────────────────────────────────────────
 export async function login(req, res, next) {
   try {
-    const data   = loginSchema.parse(req.body)
-    const result = await authService.login(data)
-    res.json(result)
+    const data            = loginSchema.parse(req.body)
+    const { user, token } = await authService.login(data)
+    setAuthCookie(res, token)
+    res.json({ user, token })
   } catch (err) { next(err) }
 }
 
 // ─── POST /api/auth/google ────────────────────────────────────────────────────
 export async function googleAuth(req, res, next) {
   try {
-    const { credential } = googleAuthSchema.parse(req.body)
-    const result = await authService.loginWithGoogle(credential)
-    res.json(result)
+    const { credential }  = googleAuthSchema.parse(req.body)
+    const { user, token } = await authService.loginWithGoogle(credential)
+    setAuthCookie(res, token)
+    res.json({ user, token })
   } catch (err) { next(err) }
 }
 

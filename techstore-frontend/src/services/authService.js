@@ -1,52 +1,50 @@
 import api from './api.js'
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
+// El token JWT viaja en una cookie httpOnly — el navegador la gestiona
+// automáticamente. Solo guardamos el objeto `user` en localStorage
+// para restaurar la sesión al recargar sin hacer una petición extra.
 
-// Registrar usuario nuevo → devuelve { user, token }
+// Registrar usuario nuevo — Paso 1: envía código de verificación al email
 export async function register(name, email, password, recaptchaToken) {
-  const data = await api.post('/auth/register', { name, email, password, recaptchaToken })
-  // Guardar token y usuario en localStorage para persistencia
-  localStorage.setItem('techstore_token', data.token)
-  localStorage.setItem('techstore_user',  JSON.stringify(data.user))
-  return data
+  return api.post('/auth/register', { name, email, password, recaptchaToken })
 }
 
-// Iniciar sesión → devuelve { user, token }
-export async function login(email, password) {
-  const data = await api.post('/auth/login', { email, password })
-  localStorage.setItem('techstore_token', data.token)
-  localStorage.setItem('techstore_user',  JSON.stringify(data.user))
-  return data
-}
-
-// Paso 2: verificar código y crear cuenta → devuelve { user, token }
+// Paso 2: verificar código y crear cuenta
 export async function verifyEmail(email, code) {
   const data = await api.post('/auth/verify-email', { email, code })
-  localStorage.setItem('techstore_token', data.token)
-  localStorage.setItem('techstore_user',  JSON.stringify(data.user))
+  // Guardamos solo el user — el token queda en cookie httpOnly
+  localStorage.setItem('techstore_user', JSON.stringify(data.user))
   return data
 }
 
-// Login con Google OAuth → devuelve { user, token }
+// Iniciar sesión
+export async function login(email, password) {
+  const data = await api.post('/auth/login', { email, password })
+  localStorage.setItem('techstore_user', JSON.stringify(data.user))
+  return data
+}
+
+// Login con Google OAuth
 export async function loginWithGoogle(credential) {
   const data = await api.post('/auth/google', { credential })
-  localStorage.setItem('techstore_token', data.token)
-  localStorage.setItem('techstore_user',  JSON.stringify(data.user))
+  localStorage.setItem('techstore_user', JSON.stringify(data.user))
   return data
 }
 
-// Cerrar sesión → limpia localStorage
-export function logout() {
-  localStorage.removeItem('techstore_token')
+// Cerrar sesión — llama al backend para limpiar la cookie + limpia localStorage
+export async function logout() {
+  try {
+    await api.post('/auth/logout', {})
+  } catch { /* si falla, igual limpiamos local */ }
   localStorage.removeItem('techstore_user')
 }
 
-// Obtener sesión guardada (para restaurar al recargar la página)
+// Obtener sesión guardada (para restaurar al recargar)
 export function getSavedSession() {
   try {
-    const token = localStorage.getItem('techstore_token')
-    const user  = JSON.parse(localStorage.getItem('techstore_user') || 'null')
-    if (token && user) return { token, user }
+    const user = JSON.parse(localStorage.getItem('techstore_user') || 'null')
+    if (user) return { user }
     return null
   } catch {
     return null
@@ -55,20 +53,16 @@ export function getSavedSession() {
 
 // ─── PERFIL ───────────────────────────────────────────────────────────────────
 
-// Obtener perfil completo del usuario autenticado (incluye direcciones)
 export async function getProfile() {
   return api.get('/auth/me')
 }
 
-// Actualizar nombre, teléfono, fecha de nacimiento
 export async function updateProfile(data) {
   const updated = await api.put('/auth/me', data)
-  // Actualizar caché local también
   localStorage.setItem('techstore_user', JSON.stringify(updated))
   return updated
 }
 
-// Cambiar contraseña
 export async function changePassword(currentPassword, newPassword) {
   return api.put('/auth/me/password', { currentPassword, newPassword })
 }

@@ -1,14 +1,23 @@
 import jwt    from 'jsonwebtoken'
 import prisma from '../config/prisma.js'
 
+// ─── EXTRAER TOKEN ────────────────────────────────────────────────────────────
+// Lee el token desde la cookie httpOnly (preferido) o del header Authorization.
+// La cookie es más segura (no accesible desde JS), el header mantiene compatibilidad.
+function extractToken(req) {
+  if (req.cookies?.token) return req.cookies.token
+  const auth = req.headers.authorization
+  if (auth?.startsWith('Bearer ')) return auth.split(' ')[1]
+  return null
+}
+
 // ─── PROTEGER RUTA (requiere token válido) ────────────────────────────────────
 export async function protect(req, res, next) {
   try {
-    const authHeader = req.headers.authorization
-    if (!authHeader?.startsWith('Bearer ')) {
+    const token = extractToken(req)
+    if (!token) {
       return res.status(401).json({ error: 'No autorizado. Token requerido.' })
     }
-    const token   = authHeader.split(' ')[1]
     const decoded = jwt.verify(token, process.env.JWT_SECRET)
     const user    = await prisma.user.findUnique({
       where:  { id: decoded.id },
@@ -34,13 +43,10 @@ export function adminOnly(req, res, next) {
 }
 
 // ─── AUTH OPCIONAL ────────────────────────────────────────────────────────────
-// No falla si no hay token, solo adjunta req.user si el token es válido.
-// Útil en rutas públicas donde el comportamiento varía según el rol.
 export async function optionalAuth(req, res, next) {
   try {
-    const authHeader = req.headers.authorization
-    if (!authHeader?.startsWith('Bearer ')) return next()
-    const token   = authHeader.split(' ')[1]
+    const token = extractToken(req)
+    if (!token) return next()
     const decoded = jwt.verify(token, process.env.JWT_SECRET)
     const user    = await prisma.user.findUnique({
       where:  { id: decoded.id },
@@ -48,7 +54,7 @@ export async function optionalAuth(req, res, next) {
     })
     if (user) req.user = user
   } catch {
-    // Token inválido o expirado — continuar como anónimo
+    // Token inválido — continuar como anónimo
   }
   next()
 }

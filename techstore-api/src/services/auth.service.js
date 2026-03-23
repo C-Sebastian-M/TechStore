@@ -1,6 +1,9 @@
-import bcrypt from 'bcryptjs'
-import jwt    from 'jsonwebtoken'
-import prisma from '../config/prisma.js'
+import bcrypt             from 'bcryptjs'
+import jwt                from 'jsonwebtoken'
+import { OAuth2Client }   from 'google-auth-library'
+import prisma             from '../config/prisma.js'
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
 
 // ─── GENERAR TOKEN JWT ────────────────────────────────────────────────────────
 function generateToken(userId) {
@@ -11,7 +14,20 @@ function generateToken(userId) {
   )
 }
 
-// ─── CAMPOS PÚBLICOS DEL USUARIO ──────────────────────────────────────────────
+// ─── SETEAR COOKIE httpOnly — protege el JWT contra XSS ──────────────────────
+// También se envía el token en el body para que el cliente conozca user/role.
+export function setAuthCookie(res, token) {
+  const isProd = process.env.NODE_ENV === 'production'
+  res.cookie('token', token, {
+    httpOnly: true,
+    secure:   isProd,
+    sameSite: isProd ? 'none' : 'lax',
+    maxAge:   24 * 60 * 60 * 1000,
+    path:     '/',
+  })
+}
+
+// ─── CAMPOS PÚBLICOS DEL USUARIO ─────────────────────────────────────────────
 const PUBLIC_USER_FIELDS = {
   id:        true,
   email:     true,
@@ -23,24 +39,20 @@ const PUBLIC_USER_FIELDS = {
 }
 
 // ─── VERIFICAR RECAPTCHA v3 ───────────────────────────────────────────────────
-// Score mínimo: 0.5 (0.0 = bot seguro, 1.0 = humano seguro)
-const RECAPTCHA_THRESHOLD = 0.5   // Score mínimo: 0.5 (0.0 = bot seguro, 1.0 = humano seguro)
+const RECAPTCHA_THRESHOLD = 0.5
 
 export async function verifyRecaptcha(token) {
   const secret = process.env.RECAPTCHA_SECRET_KEY
   if (!secret) {
-    // Si no hay secret configurado (dev local sin .env), omitir verificación
-    console.warn('⚠️  RECAPTCHA_SECRET_KEY no configurado — omitiendo verificación')
+    console.warn('RECAPTCHA_SECRET_KEY no configurado — omitiendo verificación')
     return true
   }
-
   const res  = await fetch('https://www.google.com/recaptcha/api/siteverify', {
-    method: 'POST',
+    method:  'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body:    `secret=${secret}&response=${token}`,
   })
   const data = await res.json()
-
   if (!data.success || data.score < RECAPTCHA_THRESHOLD) {
     const err = new Error('Verificación de seguridad fallida. Intenta de nuevo.')
     err.statusCode = 403
@@ -49,7 +61,7 @@ export async function verifyRecaptcha(token) {
   return true
 }
 
-// ─── PASO 1: ENVIAR CÓDIGO DE VERIFICACIÓN ──────────────────────────────────────
+// ─── PASO 1: ENVIAR CÓDIGO DE VERIFICACIÓN ───────────────────────────────────
 export async function sendVerificationCode({ name, email, password, recaptchaToken }) {
   // 1. Verificar reCAPTCHA
   await verifyRecaptcha(recaptchaToken)
@@ -62,28 +74,39 @@ export async function sendVerificationCode({ name, email, password, recaptchaTok
     throw err
   }
 
-  // 3. Generar código de 6 dígitos y guardar en BD (upsert por si reenvía)
+  // 3. Rate limit por email: esperar 60 segundos entre reenvíos
+  const pending = await prisma.emailVerification.findUnique({ where: { email } })
+  if (pending) {
+    const secondsSinceSent = (Date.now() - new Date(pending.createdAt).getTime()) / 1000
+    if (secondsSinceSent < 60) {
+      const wait = Math.ceil(60 - secondsSinceSent)
+      const err  = new Error(`Espera ${wait} segundo${wait !== 1 ? 's' : ''} antes de solicitar un nuevo código.`)
+      err.statusCode = 429
+      throw err
+    }
+  }
+
+  // 4. Generar código y guardar en BD (upsert — resetea intentos fallidos)
   const code           = String(Math.floor(100000 + Math.random() * 900000))
   const hashedPassword = await bcrypt.hash(password, 10)
-  const expiresAt      = new Date(Date.now() + 10 * 60 * 1000) // 10 minutos
+  const expiresAt      = new Date(Date.now() + 10 * 60 * 1000)
 
   await prisma.emailVerification.upsert({
     where:  { email },
-    update: { name, password: hashedPassword, code, expiresAt },
+    update: { name, password: hashedPassword, code, expiresAt, attempts: 0 },
     create: { email, name, password: hashedPassword, code, expiresAt },
   })
 
-  // 4. Enviar email con el código
+  // 5. Enviar email con el código
   const { sendVerificationCode: sendEmail } = await import('./email.service.js')
   await sendEmail(email, name, code)
 
   return { message: 'Código enviado. Revisa tu correo.' }
 }
 
-// Máximo de intentos fallidos antes de invalidar el código
+// ─── PASO 2: VERIFICAR CÓDIGO Y CREAR CUENTA ─────────────────────────────────
 const MAX_VERIFY_ATTEMPTS = 5
 
-// ─── PASO 2: VERIFICAR CÓDIGO Y CREAR CUENTA ─────────────────────────────────────
 export async function verifyCodeAndRegister({ email, code }) {
   const record = await prisma.emailVerification.findUnique({ where: { email } })
 
@@ -100,7 +123,6 @@ export async function verifyCodeAndRegister({ email, code }) {
     throw err
   }
 
-  // Verificar límite de intentos fallidos (previene fuerza bruta)
   if (record.attempts >= MAX_VERIFY_ATTEMPTS) {
     await prisma.emailVerification.delete({ where: { email } })
     const err = new Error('Demasiados intentos fallidos. Solicita un nuevo código.')
@@ -109,7 +131,6 @@ export async function verifyCodeAndRegister({ email, code }) {
   }
 
   if (record.code !== code.trim()) {
-    // Incrementar contador de intentos fallidos
     await prisma.emailVerification.update({
       where: { email },
       data:  { attempts: { increment: 1 } },
@@ -124,7 +145,7 @@ export async function verifyCodeAndRegister({ email, code }) {
     throw err
   }
 
-  // Código correcto — crear usuario y limpiar verificación
+  // Código correcto — crear usuario y limpiar verificación en una transacción
   const [user] = await prisma.$transaction([
     prisma.user.create({
       data:   { name: record.name, email, password: record.password },
@@ -137,12 +158,12 @@ export async function verifyCodeAndRegister({ email, code }) {
   return { user, token }
 }
 
-// Mantener compatibilidad — register ahora es alias de sendVerificationCode
+// Alias de compatibilidad
 export const register = sendVerificationCode
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
 export async function login({ email, password }) {
-  const user = await prisma.user.findUnique({ where: { email } })
+  const user        = await prisma.user.findUnique({ where: { email } })
   const INVALID_MSG = 'Email o contraseña incorrectos.'
 
   if (!user) {
@@ -165,43 +186,41 @@ export async function login({ email, password }) {
 }
 
 // ─── GOOGLE OAUTH ─────────────────────────────────────────────────────────────
-// Verifica el ID token de Google y crea o recupera el usuario.
-// Si el email ya existe con cuenta normal, vincula la sesión.
+// Verificación con google-auth-library (oficial) en lugar del endpoint deprecado tokeninfo
 export async function loginWithGoogle(credential) {
-  // Verificar el token con la API de Google
-  const res  = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${credential}`)
-  const data = await res.json()
-
-  if (data.error || !data.email_verified) {
+  let payload
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken:  credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    })
+    payload = ticket.getPayload()
+  } catch {
     const err = new Error('Token de Google inválido.')
     err.statusCode = 401
     throw err
   }
 
-  // Verificar que el token fue emitido para nuestra app
-  if (data.aud !== process.env.GOOGLE_CLIENT_ID) {
-    const err = new Error('Token de Google no corresponde a esta aplicación.')
+  if (!payload?.email_verified) {
+    const err = new Error('El correo de Google no está verificado.')
     err.statusCode = 401
     throw err
   }
 
-  const email = data.email.toLowerCase()
-  const name  = data.name || data.given_name || email.split('@')[0]
+  const email = payload.email.toLowerCase()
+  const name  = payload.name || payload.given_name || email.split('@')[0]
 
-  // Buscar o crear usuario
   let user = await prisma.user.findUnique({
     where:  { email },
     select: PUBLIC_USER_FIELDS,
   })
 
   if (!user) {
-    // Nuevo usuario — crear con password vacío (no puede hacer login con email/pass)
     user = await prisma.user.create({
       data: {
         email,
         name,
-        // Password inutilizable — solo puede autenticarse con Google
-        password: await bcrypt.hash(Math.random().toString(36), 10),
+        password: await bcrypt.hash(Math.random().toString(36) + Date.now(), 10),
       },
       select: PUBLIC_USER_FIELDS,
     })
@@ -211,7 +230,7 @@ export async function loginWithGoogle(credential) {
   return { user, token }
 }
 
-// ─── OBTENER PERFIL PROPIO ────────────────────────────────────────────────────
+// ─── OBTENER PERFIL ───────────────────────────────────────────────────────────
 export async function getProfile(userId) {
   const user = await prisma.user.findUnique({
     where:  { id: userId },
@@ -242,14 +261,12 @@ export async function changePassword(userId, { currentPassword, newPassword }) {
     err.statusCode = 404
     throw err
   }
-
   const isMatch = await bcrypt.compare(currentPassword, user.password)
   if (!isMatch) {
     const err = new Error('La contraseña actual es incorrecta.')
     err.statusCode = 400
     throw err
   }
-
   const hashed = await bcrypt.hash(newPassword, 10)
   await prisma.user.update({ where: { id: userId }, data: { password: hashed } })
   return { message: 'Contraseña actualizada correctamente.' }
