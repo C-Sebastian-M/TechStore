@@ -155,7 +155,8 @@ model EmailVerification {
   name      String
   password  String   // Hash bcrypt — se guarda aquí hasta verificar
   code      String   // 6 dígitos
-  expiresAt DateTime // 10 minutos desde creación
+  attempts  Int      @default(0)  // intentos fallidos
+  expiresAt DateTime             // 10 minutos desde creación
   createdAt DateTime @default(now())
 
   @@unique([email])    // Solo un código pendiente por email

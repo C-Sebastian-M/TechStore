@@ -1,39 +1,33 @@
 import nodemailer from 'nodemailer'
 
 // ─── TRANSPORTER DE GMAIL ─────────────────────────────────────────────────────
-// Usa cuenta de Gmail con contraseña de aplicación (no la contraseña normal).
-// Cómo obtener la contraseña de aplicación:
+// Instancia única — se crea al iniciar el módulo y se reutiliza en cada envío.
+// Usar una instancia por invocación causa overhead de conexión innecesario.
+// Cómo obtener la contraseña de aplicación de Gmail:
 //   1. Activa verificación en 2 pasos en tu cuenta Google
 //   2. Ve a: myaccount.google.com → Seguridad → Contraseñas de aplicación
 //   3. Crea una contraseña para "Correo" → copia los 16 caracteres
 //   4. Pon esos 16 caracteres en GMAIL_APP_PASSWORD (sin espacios)
-function createTransporter() {
-  const user = process.env.GMAIL_USER
-  const pass = process.env.GMAIL_APP_PASSWORD
-
-  if (!user || !pass) return null
-
-  return nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user, pass },
-  })
-}
+const transporter = (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD)
+  ? nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_APP_PASSWORD,
+      },
+    })
+  : null
 
 // ─── ENVIAR CÓDIGO DE VERIFICACIÓN ───────────────────────────────────────────
 export async function sendVerificationCode(email, name, code) {
-  const transporter = createTransporter()
-
   // Sin credenciales → modo desarrollo, solo loguear el código
   if (!transporter) {
     console.log(`\n📧 [DEV] Código de verificación para ${email}: ${code}\n`)
     return
   }
 
-  const senderName  = 'TechStore'
-  const senderEmail = process.env.GMAIL_USER
-
   await transporter.sendMail({
-    from:    `"${senderName}" <${senderEmail}>`,
+    from:    `"TechStore" <${process.env.GMAIL_USER}>`,
     to:      email,
     subject: `${code} es tu código de verificación — TechStore`,
     html: `
@@ -84,6 +78,4 @@ export async function sendVerificationCode(email, name, code) {
       </html>
     `,
   })
-
-  console.log(`📧 Código enviado a ${email}`)
 }

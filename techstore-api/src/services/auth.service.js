@@ -24,7 +24,7 @@ const PUBLIC_USER_FIELDS = {
 
 // ─── VERIFICAR RECAPTCHA v3 ───────────────────────────────────────────────────
 // Score mínimo: 0.5 (0.0 = bot seguro, 1.0 = humano seguro)
-const RECAPTCHA_THRESHOLD = 0.1   // Umbral bajo — reCAPTCHA v3 puede dar scores bajos en desarrollo/VPN
+const RECAPTCHA_THRESHOLD = 0.5   // Score mínimo: 0.5 (0.0 = bot seguro, 1.0 = humano seguro)
 
 export async function verifyRecaptcha(token) {
   const secret = process.env.RECAPTCHA_SECRET_KEY
@@ -40,10 +40,9 @@ export async function verifyRecaptcha(token) {
     body:    `secret=${secret}&response=${token}`,
   })
   const data = await res.json()
-  console.log('reCAPTCHA response:', JSON.stringify(data))
 
   if (!data.success || data.score < RECAPTCHA_THRESHOLD) {
-    const err = new Error(`Verificación fallida. Score: ${data.score ?? 'N/A'}, success: ${data.success}, errors: ${JSON.stringify(data['error-codes'])}`)
+    const err = new Error('Verificación de seguridad fallida. Intenta de nuevo.')
     err.statusCode = 403
     throw err
   }
@@ -81,6 +80,9 @@ export async function sendVerificationCode({ name, email, password, recaptchaTok
   return { message: 'Código enviado. Revisa tu correo.' }
 }
 
+// Máximo de intentos fallidos antes de invalidar el código
+const MAX_VERIFY_ATTEMPTS = 5
+
 // ─── PASO 2: VERIFICAR CÓDIGO Y CREAR CUENTA ─────────────────────────────────────
 export async function verifyCodeAndRegister({ email, code }) {
   const record = await prisma.emailVerification.findUnique({ where: { email } })
@@ -98,8 +100,26 @@ export async function verifyCodeAndRegister({ email, code }) {
     throw err
   }
 
+  // Verificar límite de intentos fallidos (previene fuerza bruta)
+  if (record.attempts >= MAX_VERIFY_ATTEMPTS) {
+    await prisma.emailVerification.delete({ where: { email } })
+    const err = new Error('Demasiados intentos fallidos. Solicita un nuevo código.')
+    err.statusCode = 429
+    throw err
+  }
+
   if (record.code !== code.trim()) {
-    const err = new Error('Código incorrecto.')
+    // Incrementar contador de intentos fallidos
+    await prisma.emailVerification.update({
+      where: { email },
+      data:  { attempts: { increment: 1 } },
+    })
+    const remaining = MAX_VERIFY_ATTEMPTS - record.attempts - 1
+    const err = new Error(
+      remaining > 0
+        ? `Código incorrecto. Te quedan ${remaining} intento${remaining !== 1 ? 's' : ''}.`
+        : 'Código incorrecto. Se agotaron los intentos, solicita uno nuevo.'
+    )
     err.statusCode = 400
     throw err
   }

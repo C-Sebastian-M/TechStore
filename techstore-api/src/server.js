@@ -53,8 +53,9 @@ app.use(express.urlencoded({ extended: true, limit: '1mb' }))
 // ─── 4. Rate limiting ────────────────────────────────────────────────────────
 const limiterOpts = { standardHeaders: true, legacyHeaders: false }
 app.use('/api/', rateLimit({ ...limiterOpts, windowMs: 15*60*1000, max: 300, message: { error: 'Demasiadas peticiones. Espera unos minutos.' } }))
-app.use('/api/auth/login',    rateLimit({ ...limiterOpts, windowMs: 15*60*1000, max: 10,  message: { error: 'Demasiados intentos. Espera 15 minutos.' } }))
-app.use('/api/auth/register', rateLimit({ ...limiterOpts, windowMs: 60*60*1000, max: 5,   message: { error: 'Demasiados registros. Espera una hora.' } }))
+app.use('/api/auth/login',        rateLimit({ ...limiterOpts, windowMs: 15*60*1000, max: 10, message: { error: 'Demasiados intentos. Espera 15 minutos.' } }))
+app.use('/api/auth/register',     rateLimit({ ...limiterOpts, windowMs: 60*60*1000, max: 5,  message: { error: 'Demasiados registros. Espera una hora.' } }))
+app.use('/api/auth/verify-email', rateLimit({ ...limiterOpts, windowMs: 15*60*1000, max: 10, message: { error: 'Demasiados intentos de verificación. Espera 15 minutos.' } }))
 app.use('/api/contact',       rateLimit({ ...limiterOpts, windowMs: 60*60*1000, max: 10,  message: { error: 'Demasiados mensajes. Espera una hora.' } }))
 
 // ─── Archivos estáticos — imágenes ───────────────────────────────────────────

@@ -38,6 +38,41 @@ export default function Payment() {
 
   const handlePay = async () => {
     if (!isAuthenticated) { openLogin(); return }
+
+    // Validar campos obligatorios antes de enviar
+    const { firstName, lastName, address, city } = formData
+    if (!firstName.trim() || !lastName.trim()) {
+      setPayError('Ingresa tu nombre completo para el envío.')
+      return
+    }
+    if (!address.trim()) {
+      setPayError('Ingresa la dirección de envío.')
+      return
+    }
+    if (!city.trim()) {
+      setPayError('Ingresa la ciudad de envío.')
+      return
+    }
+    if (paymentMethod === 'card') {
+      const { cardHolder, cardNumber, expiry, cvv } = formData
+      if (!cardHolder.trim() || !cardNumber.trim() || !expiry.trim() || !cvv.trim()) {
+        setPayError('Completa todos los campos de la tarjeta.')
+        return
+      }
+      if (cardNumber.replace(/\s/g, '').length < 15) {
+        setPayError('Número de tarjeta inválido.')
+        return
+      }
+      if (!/^\d{2}\/\d{2}$/.test(expiry)) {
+        setPayError('Fecha de expiración inválida. Usa el formato MM/AA.')
+        return
+      }
+      if (cvv.length < 3) {
+        setPayError('CVV inválido.')
+        return
+      }
+    }
+
     setPaying(true)
     setPayError('')
     try {
