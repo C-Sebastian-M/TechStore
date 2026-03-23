@@ -90,16 +90,19 @@ function AddedToCartModal({ addedSlots, total, onKeepBuilding, onGoToCart }) {
   )
 }
 
-// Nombres de los productos del configurador por categoría (coinciden con seed.js)
-const CONFIGURATOR_NAMES = {
-  cpu:         ['Intel Core i9-14900K', 'AMD Ryzen 9 7950X3D', 'Intel Core i5-14600K', 'AMD Ryzen 5 7600X'],
-  motherboard: ['ASUS ROG Maximus Z790 Hero', 'MSI MEG X670E ACE', 'Gigabyte B760M DS3H'],
-  ram:         ['Corsair Dominator Platinum 64GB DDR5', 'G.Skill Trident Z5 32GB DDR5', 'Kingston Fury Beast 16GB DDR4'],
-  gpu:         ['ASUS ROG Strix RTX 4090 24GB', 'MSI Gaming RTX 4080 Super 16GB', 'Sapphire Pulse RX 7800 XT 16GB', 'Gigabyte RTX 4070 Ti Super 16GB'],
-  storage:     ['Samsung 990 Pro 2TB NVMe', 'WD Black SN850X 1TB', 'Seagate Barracuda 4TB HDD'],
-  psu:         ['Corsair RM1000x 1000W 80+ Gold', 'EVGA SuperNOVA 850W 80+ Platinum', 'Seasonic Focus GX 650W 80+ Gold'],
-  case:        ['Lian Li PC-O11 Dynamic EVO', 'Fractal Design Meshify 2', 'NZXT H9 Flow'],
-  cooling:     ['Corsair iCUE H150i Elite 360mm AIO', 'Noctua NH-D15 Chromax', 'DeepCool AK620 Dual Tower'],
+// ─── MAPEO slot → slug de categoría en la BD ─────────────────────────────────
+// El configurador ahora carga TODOS los productos de cada categoría dinámicamente.
+// Agregar un producto al admin con la categoría correcta es suficiente para que
+// aparezca en el configurador — no se necesita tocar código.
+const SLOT_TO_CATEGORY = {
+  cpu:         'procesadores',
+  motherboard: 'placas-madre',
+  ram:         'memorias-ram',
+  gpu:         'tarjetas-de-video',
+  storage:     'almacenamiento',
+  psu:         'fuentes-de-poder',
+  case:        'gabinetes',
+  cooling:     'enfriamiento',
 }
 
 // Metadatos extra que no están en la BD pero sí en el configurador
@@ -514,47 +517,39 @@ export default function PCConfigurator() {
     async function loadComponents() {
       setLoadingComponents(true)
       try {
-        // Traer todos los productos de una vez (limit alto) para mapear por nombre
-        const data = await productService.getProducts({ limit: 100 })
-        // El backend devuelve { data: [...], pagination: {...} }
-        const allProducts = data?.data || data?.products || (Array.isArray(data) ? data : [])
-
-        // Construir el mapa de componentes por slot
-        const built = {}
-        Object.entries(CONFIGURATOR_NAMES).forEach(([slot, names]) => {
-          built[slot] = names
-            .map(name => {
-              const p = allProducts.find(prod =>
-                prod.name.toLowerCase().trim() === name.toLowerCase().trim()
-              )
-              if (!p) return null
-              const meta = EXTRA_META[name] || {}
+        // Cargar cada slot por su slug de categoría en paralelo.
+        // Así cualquier producto nuevo en el admin aparece automáticamente.
+        const entries = await Promise.all(
+          Object.entries(SLOT_TO_CATEGORY).map(async ([slot, categorySlug]) => {
+            const data = await productService.getProducts({
+              category: categorySlug,
+              limit:    100,
+              sortBy:   'name',
+              sortOrder:'asc',
+            })
+            const products = data?.data || data?.products || (Array.isArray(data) ? data : [])
+            const mapped = products.map(p => {
+              const meta = EXTRA_META[p.name] || {}
               return {
-                id:    p.id,        // CUID real de la BD
+                id:    p.id,
                 name:  p.name,
                 brand: p.brand,
                 price: Number(p.price),
                 image: p.image,
                 specs: p.specs || [],
                 badge: p.badge || meta.badge || null,
-                // Metadatos extra para compatibilidad y scoring
                 ...meta,
               }
             })
-            .filter(Boolean)
-        })
-        // Log de diagnóstico: muestra cuántos componentes se encontraron por slot
-        const found  = Object.entries(built).map(([s, arr]) => `${s}:${arr.length}`).join(' | ')
-        const missed = Object.entries(CONFIGURATOR_NAMES).flatMap(([slot, names]) =>
-          names.filter(name => !allProducts.find(p => p.name.toLowerCase().trim() === name.toLowerCase().trim()))
-               .map(name => `[${slot}] "${name}"`)
+            return [slot, mapped]
+          })
         )
-        console.log(`✅ Configurador — componentes cargados: ${found || 'ninguno'}`)
-        if (missed.length) console.warn(`⚠️ Configurador — no encontrados en BD (verifica el seed):`, missed)
+        const built = Object.fromEntries(entries)
+        const summary = Object.entries(built).map(([s, arr]) => `${s}:${arr.length}`).join(' | ')
+        console.log(`✅ Configurador — componentes cargados: ${summary || 'ninguno'}`)
         setComponents(built)
       } catch (err) {
         console.error('Error cargando componentes del configurador:', err)
-        // Si la API falla, dejar componentes vacíos (el configurador muestra estado de carga)
         setComponents({})
       } finally {
         setLoadingComponents(false)

@@ -1,7 +1,8 @@
 // ─── URL BASE ─────────────────────────────────────────────────────────────────
 // En desarrollo apunta al backend local.
 // En producción cambia esta variable en el .env del frontend.
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
+// Eliminar barra final si existe para evitar doble slash al concatenar endpoints
+const BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3001/api').replace(/\/+$/, '')
 
 // ─── HELPER PARA OBTENER EL TOKEN ─────────────────────────────────────────────
 const getToken = () => localStorage.getItem('techstore_token')

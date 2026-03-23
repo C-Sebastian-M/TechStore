@@ -9,36 +9,10 @@ import * as productService from '../../services/productService.js'
 // Los componentes del configurador siguen siendo locales pero navegan al configurador,
 // no a una URL de producto con ID falso.
 
-import { CONFIGURATOR_NAMES } from '../../data/configurator'
-
-const CATEGORY_LABELS = {
-  cpu:         'Procesadores',
-  motherboard: 'Placas Madre',
-  ram:         'Memorias RAM',
-  gpu:         'Tarjetas de Video',
-  storage:     'Almacenamiento',
-  psu:         'Fuentes de Poder',
-  case:        'Gabinetes',
-  cooling:     'Enfriamiento',
-}
-
-// Índice de búsqueda para los componentes del configurador.
-// Se construye desde CONFIGURATOR_NAMES (solo nombres, sin datos estáticos de precio/imagen).
-// Todos los resultados navegan a /configurador — nunca a /producto/:id.
-const CONFIGURATOR_INDEX = Object.entries(CONFIGURATOR_NAMES).flatMap(([slot, names]) =>
-  names.map((name, i) => ({
-    id:       `configurator-${slot}-${i}`,
-    name,
-    brand:    '',                           // La marca se resuelve en la API si hace falta
-    category: CATEGORY_LABELS[slot] || slot,
-    price:    null,                         // No mostramos precio estático
-    image:    null,
-    badge:    null,
-    badgeColor: null,
-    type:     'configurator',
-    href:     '/configurador',
-  }))
-)
+// El índice del configurador ya no es estático.
+// La búsqueda usa directamente la API — todos los productos del configurador
+// son productos normales con categoría y aparecen en los resultados del catálogo.
+const CONFIGURATOR_INDEX = []
 
 function Highlight({ text, query }) {
   if (!query) return <span>{text}</span>

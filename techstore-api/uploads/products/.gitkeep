@@ -1,0 +1,2 @@
+# Esta carpeta almacena imágenes subidas en desarrollo local.
+# En producción (Vercel) el sistema de archivos es efímero — usar Cloudinary o S3.
