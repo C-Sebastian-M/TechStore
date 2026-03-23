@@ -95,7 +95,7 @@ function useGoogleOAuth(onSuccess) {
 }
 
 export default function AuthModal() {
-  const { authModal, closeAuth, login, register, loginWithGoogle } = useAuth();
+  const { authModal, closeAuth, login, register, verifyEmail, loginWithGoogle } = useAuth();
   const { open, tab } = authModal;
 
   const [activeTab,    setActiveTab]    = useState(tab);
@@ -154,6 +154,10 @@ export default function AuthModal() {
     } finally { setLoading(false); }
   };
 
+  const [verifying, setVerifying] = useState(false); // true = mostrando paso 2
+  const [verifyCode, setVerifyCode] = useState("");
+  const [pendingEmail, setPendingEmail] = useState(""); // email del paso 1
+
   const handleRegister = async (e) => {
     e.preventDefault();
     setError("");
@@ -165,11 +169,26 @@ export default function AuthModal() {
 
     setLoading(true);
     try {
-      // Obtener token reCAPTCHA v3 antes de enviar
       const recaptchaToken = await executeRecaptcha('register');
       await register(name, email, password, recaptchaToken);
+      // Paso 1 OK — mostrar formulario de código
+      setPendingEmail(email);
+      setVerifying(true);
+      setError("");
     } catch (err) {
-      setError(err.message || "Error al crear la cuenta.");
+      setError(err.message || "Error al enviar el código.");
+    } finally { setLoading(false); }
+  };
+
+  const handleVerifyCode = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (!verifyCode || verifyCode.length !== 6) { setError("Ingresa el código de 6 dígitos."); return; }
+    setLoading(true);
+    try {
+      await verifyEmail(pendingEmail, verifyCode);
+    } catch (err) {
+      setError(err.message || "Código incorrecto.");
     } finally { setLoading(false); }
   };
 
@@ -207,12 +226,12 @@ export default function AuthModal() {
               <span className="text-lg font-bold text-white">TechStore</span>
             </div>
             <p className="text-slate-400 text-sm">
-              {activeTab === "login" ? "Bienvenido de vuelta" : "Crea tu cuenta gratis"}
+              {activeTab === "login" ? "Bienvenido de vuelta" : verifying ? "Verificación de correo" : "Crea tu cuenta gratis"}
             </p>
           </div>
 
-          {/* Tabs */}
-          <div className="flex mx-8 mt-4 bg-background-dark rounded-lg p-1 gap-1">
+          {/* Tabs — ocultos durante la verificación de código */}
+          <div className={`flex mx-8 mt-4 bg-background-dark rounded-lg p-1 gap-1 ${verifying ? 'opacity-0 pointer-events-none h-0 mt-0 overflow-hidden' : ''}`}>
             {[{ id: "login", label: "Iniciar Sesión" }, { id: "register", label: "Registrarse" }].map(t => (
               <button key={t.id} onClick={() => { setActiveTab(t.id); setError(""); }}
                 className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${activeTab === t.id ? "bg-primary text-white shadow-lg shadow-primary/20" : "text-slate-400 hover:text-white"}`}>
@@ -292,8 +311,56 @@ export default function AuthModal() {
             </form>
           )}
 
+          {/* ── PASO 2: VERIFICAR CÓDIGO ── */}
+          {activeTab === "register" && verifying && (
+            <form onSubmit={handleVerifyCode} className="flex flex-col gap-5 px-8 py-6">
+              <div className="flex flex-col items-center text-center gap-3 mb-2">
+                <div className="size-14 rounded-full bg-primary/20 border-2 border-primary/40 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-primary text-[28px]">mark_email_read</span>
+                </div>
+                <div>
+                  <p className="text-white font-bold">Revisa tu correo</p>
+                  <p className="text-slate-400 text-sm mt-1">
+                    Enviamos un código de 6 dígitos a<br/>
+                    <span className="text-primary font-bold">{pendingEmail}</span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Input código */}
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wide text-center">Código de verificación</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={verifyCode}
+                  onChange={e => setVerifyCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="000000"
+                  className="w-full rounded-xl bg-background-dark border-2 border-border-dark text-white placeholder-slate-600 focus:border-primary h-14 text-center text-3xl font-mono font-black tracking-[0.5em] outline-none transition-colors"
+                  autoFocus
+                />
+              </div>
+
+              <button type="submit" disabled={loading || verifyCode.length !== 6}
+                className="w-full h-12 bg-primary hover:bg-blue-600 text-white font-bold rounded-lg transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed">
+                {loading
+                  ? <><span className="animate-spin material-symbols-outlined text-[20px]">progress_activity</span>Verificando...</>
+                  : <><span className="material-symbols-outlined text-[20px]">verified</span>Verificar y crear cuenta</>}
+              </button>
+
+              <div className="flex flex-col items-center gap-1">
+                <p className="text-slate-500 text-xs">El código expira en 10 minutos.</p>
+                <button type="button" onClick={() => { setVerifying(false); setVerifyCode(''); setError(''); }}
+                  className="text-primary text-xs hover:underline font-medium">
+                  ← Volver y cambiar los datos
+                </button>
+              </div>
+            </form>
+          )}
+
           {/* ── REGISTRO ── */}
-          {activeTab === "register" && (
+          {activeTab === "register" && !verifying && (
             <form onSubmit={handleRegister} className="flex flex-col gap-4 px-8 py-6">
               {/* Nombre */}
               <div className="flex flex-col gap-2">

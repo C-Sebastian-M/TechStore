@@ -12,15 +12,15 @@ datasource db {
 
 // Usuario del sistema
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String                        // Hash bcrypt — nunca plain text
-  name      String
-  phone     String?
-  birthDate DateTime?
-  role      Role     @default(CUSTOMER)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(cuid())
+  email         String   @unique
+  password      String                        // Hash bcrypt — nunca plain text
+  name          String
+  phone         String?
+  birthDate     DateTime?
+  role          Role     @default(CUSTOMER)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   // Relaciones
   addresses Address[]
@@ -145,6 +145,21 @@ model OrderItem {
   product Product @relation(fields: [productId], references: [id])
 
   @@map("order_items")
+}
+
+// Verificación de email — código temporal antes de crear la cuenta
+// Se elimina al verificar o al expirar
+model EmailVerification {
+  id        String   @id @default(cuid())
+  email     String
+  name      String
+  password  String   // Hash bcrypt — se guarda aquí hasta verificar
+  code      String   // 6 dígitos
+  expiresAt DateTime // 10 minutos desde creación
+  createdAt DateTime @default(now())
+
+  @@unique([email])    // Solo un código pendiente por email
+  @@map("email_verifications")
 }
 
 // Producto favorito del usuario

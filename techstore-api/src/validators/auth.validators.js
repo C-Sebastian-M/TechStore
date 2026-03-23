@@ -30,6 +30,12 @@ export const loginSchema = z.object({
     .max(72, 'Contraseña inválida'),
 })
 
+// ─── VERIFICAR CÓDIGO DE EMAIL ──────────────────────────────────────────────
+export const verifyCodeSchema = z.object({
+  email: z.string().email().max(254).toLowerCase().trim(),
+  code:  z.string().length(6, 'El código debe tener 6 dígitos').regex(/^\d{6}$/, 'Solo dígitos'),
+})
+
 // ─── GOOGLE OAUTH ─────────────────────────────────────────────────────────────
 export const googleAuthSchema = z.object({
   credential: z.string().min(1, 'Token de Google requerido'),

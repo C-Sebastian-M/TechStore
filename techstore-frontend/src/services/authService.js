@@ -19,6 +19,14 @@ export async function login(email, password) {
   return data
 }
 
+// Paso 2: verificar código y crear cuenta → devuelve { user, token }
+export async function verifyEmail(email, code) {
+  const data = await api.post('/auth/verify-email', { email, code })
+  localStorage.setItem('techstore_token', data.token)
+  localStorage.setItem('techstore_user',  JSON.stringify(data.user))
+  return data
+}
+
 // Login con Google OAuth → devuelve { user, token }
 export async function loginWithGoogle(credential) {
   const data = await api.post('/auth/google', { credential })

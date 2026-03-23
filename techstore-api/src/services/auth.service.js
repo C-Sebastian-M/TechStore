@@ -49,12 +49,12 @@ export async function verifyRecaptcha(token) {
   return true
 }
 
-// ─── REGISTRO ─────────────────────────────────────────────────────────────────
-export async function register({ name, email, password, recaptchaToken }) {
+// ─── PASO 1: ENVIAR CÓDIGO DE VERIFICACIÓN ──────────────────────────────────────
+export async function sendVerificationCode({ name, email, password, recaptchaToken }) {
   // 1. Verificar reCAPTCHA
   await verifyRecaptcha(recaptchaToken)
 
-  // 2. Verificar email único
+  // 2. Verificar que el email no esté ya registrado
   const existing = await prisma.user.findUnique({ where: { email } })
   if (existing) {
     const err = new Error('Ya existe una cuenta con ese email.')
@@ -62,16 +62,62 @@ export async function register({ name, email, password, recaptchaToken }) {
     throw err
   }
 
-  // 3. Hashear contraseña y crear usuario
+  // 3. Generar código de 6 dígitos y guardar en BD (upsert por si reenvía)
+  const code           = String(Math.floor(100000 + Math.random() * 900000))
   const hashedPassword = await bcrypt.hash(password, 10)
-  const user = await prisma.user.create({
-    data:   { name, email, password: hashedPassword },
-    select: PUBLIC_USER_FIELDS,
+  const expiresAt      = new Date(Date.now() + 10 * 60 * 1000) // 10 minutos
+
+  await prisma.emailVerification.upsert({
+    where:  { email },
+    update: { name, password: hashedPassword, code, expiresAt },
+    create: { email, name, password: hashedPassword, code, expiresAt },
   })
+
+  // 4. Enviar email con el código
+  const { sendVerificationCode: sendEmail } = await import('./email.service.js')
+  await sendEmail(email, name, code)
+
+  return { message: 'Código enviado. Revisa tu correo.' }
+}
+
+// ─── PASO 2: VERIFICAR CÓDIGO Y CREAR CUENTA ─────────────────────────────────────
+export async function verifyCodeAndRegister({ email, code }) {
+  const record = await prisma.emailVerification.findUnique({ where: { email } })
+
+  if (!record) {
+    const err = new Error('No hay verificación pendiente para este email.')
+    err.statusCode = 400
+    throw err
+  }
+
+  if (new Date() > record.expiresAt) {
+    await prisma.emailVerification.delete({ where: { email } })
+    const err = new Error('El código expiró. Solicita uno nuevo.')
+    err.statusCode = 400
+    throw err
+  }
+
+  if (record.code !== code.trim()) {
+    const err = new Error('Código incorrecto.')
+    err.statusCode = 400
+    throw err
+  }
+
+  // Código correcto — crear usuario y limpiar verificación
+  const [user] = await prisma.$transaction([
+    prisma.user.create({
+      data:   { name: record.name, email, password: record.password },
+      select: PUBLIC_USER_FIELDS,
+    }),
+    prisma.emailVerification.delete({ where: { email } }),
+  ])
 
   const token = generateToken(user.id)
   return { user, token }
 }
+
+// Mantener compatibilidad — register ahora es alias de sendVerificationCode
+export const register = sendVerificationCode
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
 export async function login({ email, password }) {

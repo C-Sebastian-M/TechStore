@@ -1,6 +1,7 @@
 import * as authService from '../services/auth.service.js'
 import {
   registerSchema,
+  verifyCodeSchema,
   loginSchema,
   googleAuthSchema,
   updateProfileSchema,
@@ -8,11 +9,20 @@ import {
   addressSchema,
 } from '../validators/auth.validators.js'
 
-// ─── POST /api/auth/register ─────────────────────────────────────────────────
+// ─── POST /api/auth/register — Paso 1: enviar código ─────────────────────────
 export async function register(req, res, next) {
   try {
     const data   = registerSchema.parse(req.body)
-    const result = await authService.register(data)
+    const result = await authService.sendVerificationCode(data)
+    res.status(200).json(result)
+  } catch (err) { next(err) }
+}
+
+// ─── POST /api/auth/verify-email — Paso 2: verificar y crear cuenta ──────────
+export async function verifyEmail(req, res, next) {
+  try {
+    const data   = verifyCodeSchema.parse(req.body)
+    const result = await authService.verifyCodeAndRegister(data)
     res.status(201).json(result)
   } catch (err) { next(err) }
 }

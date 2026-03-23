@@ -5,9 +5,10 @@ import * as ctrl   from '../controllers/auth.controller.js'
 const router = Router()
 
 // ─── PÚBLICAS ─────────────────────────────────────────────────────────────────
-router.post('/register', ctrl.register)
-router.post('/login',    ctrl.login)
-router.post('/google',   ctrl.googleAuth)   // ← Google OAuth
+router.post('/register',     ctrl.register)    // Paso 1: enviar código
+router.post('/verify-email', ctrl.verifyEmail) // Paso 2: verificar y crear cuenta
+router.post('/login',        ctrl.login)
+router.post('/google',       ctrl.googleAuth)
 
 // ─── PROTEGIDAS (requieren token) ─────────────────────────────────────────────
 router.get   ('/me',                 protect, ctrl.getMe)

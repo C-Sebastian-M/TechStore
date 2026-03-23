@@ -8,19 +8,29 @@ export function AuthProvider({ children }) {
   const [loading,   setLoading]   = useState(true)
   const [authModal, setAuthModal] = useState({ open: false, tab: 'login' })
 
-  // ── Restaurar sesión al montar ────────────────────────────────────────────
   useEffect(() => {
     const session = authService.getSavedSession()
     if (session) setUser(session.user)
     setLoading(false)
   }, [])
 
-  // ── Acciones del modal ────────────────────────────────────────────────────
   const openLogin    = () => setAuthModal({ open: true,  tab: 'login'    })
   const openRegister = () => setAuthModal({ open: true,  tab: 'register' })
   const closeAuth    = () => setAuthModal({ open: false, tab: 'login'    })
 
-  // ── Login con email/password ──────────────────────────────────────────────
+  // Paso 1: enviar código de verificación
+  const register = async (name, email, password, recaptchaToken) => {
+    return authService.register(name, email, password, recaptchaToken)
+  }
+
+  // Paso 2: verificar código y crear cuenta
+  const verifyEmail = async (email, code) => {
+    const { user } = await authService.verifyEmail(email, code)
+    setUser(user)
+    closeAuth()
+    return user
+  }
+
   const login = async (email, password) => {
     const { user } = await authService.login(email, password)
     setUser(user)
@@ -28,15 +38,6 @@ export function AuthProvider({ children }) {
     return user
   }
 
-  // ── Registro con email/password + reCAPTCHA ───────────────────────────────
-  const register = async (name, email, password, recaptchaToken) => {
-    const { user } = await authService.register(name, email, password, recaptchaToken)
-    setUser(user)
-    closeAuth()
-    return user
-  }
-
-  // ── Login con Google OAuth ────────────────────────────────────────────────
   const loginWithGoogle = async (credential) => {
     const { user } = await authService.loginWithGoogle(credential)
     setUser(user)
@@ -44,21 +45,17 @@ export function AuthProvider({ children }) {
     return user
   }
 
-  // ── Logout ────────────────────────────────────────────────────────────────
   const logout = () => {
     authService.logout()
     setUser(null)
   }
 
-  // ── Refrescar datos del usuario ───────────────────────────────────────────
   const refreshUser = async () => {
     try {
       const updated = await authService.getProfile()
       setUser(updated)
       localStorage.setItem('techstore_user', JSON.stringify(updated))
-    } catch {
-      // Token expirado — api.js redirige automáticamente
-    }
+    } catch { /* token expirado */ }
   }
 
   return (
@@ -72,6 +69,7 @@ export function AuthProvider({ children }) {
       closeAuth,
       login,
       register,
+      verifyEmail,
       loginWithGoogle,
       logout,
       refreshUser,
