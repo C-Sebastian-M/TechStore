@@ -24,7 +24,7 @@ const PUBLIC_USER_FIELDS = {
 
 // ─── VERIFICAR RECAPTCHA v3 ───────────────────────────────────────────────────
 // Score mínimo: 0.5 (0.0 = bot seguro, 1.0 = humano seguro)
-const RECAPTCHA_THRESHOLD = 0.5
+const RECAPTCHA_THRESHOLD = 0.1   // Umbral bajo — reCAPTCHA v3 puede dar scores bajos en desarrollo/VPN
 
 export async function verifyRecaptcha(token) {
   const secret = process.env.RECAPTCHA_SECRET_KEY
