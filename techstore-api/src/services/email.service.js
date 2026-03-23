@@ -1,21 +1,39 @@
-import { Resend } from 'resend'
+import nodemailer from 'nodemailer'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+// ─── TRANSPORTER DE GMAIL ─────────────────────────────────────────────────────
+// Usa cuenta de Gmail con contraseña de aplicación (no la contraseña normal).
+// Cómo obtener la contraseña de aplicación:
+//   1. Activa verificación en 2 pasos en tu cuenta Google
+//   2. Ve a: myaccount.google.com → Seguridad → Contraseñas de aplicación
+//   3. Crea una contraseña para "Correo" → copia los 16 caracteres
+//   4. Pon esos 16 caracteres en GMAIL_APP_PASSWORD (sin espacios)
+function createTransporter() {
+  const user = process.env.GMAIL_USER
+  const pass = process.env.GMAIL_APP_PASSWORD
 
-// Para usar un dominio propio (ej: noreply@techstore.com) debes verificarlo en resend.com/domains
-// Mientras tanto, usar el dominio de prueba de Resend que funciona sin verificación
-const FROM = 'TechStore <techstore1420@gmail.com>'
+  if (!user || !pass) return null
+
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user, pass },
+  })
+}
 
 // ─── ENVIAR CÓDIGO DE VERIFICACIÓN ───────────────────────────────────────────
 export async function sendVerificationCode(email, name, code) {
-  // En desarrollo sin API key, solo loguear
-  if (!process.env.RESEND_API_KEY) {
+  const transporter = createTransporter()
+
+  // Sin credenciales → modo desarrollo, solo loguear el código
+  if (!transporter) {
     console.log(`\n📧 [DEV] Código de verificación para ${email}: ${code}\n`)
     return
   }
 
-  await resend.emails.send({
-    from:    FROM,
+  const senderName  = 'TechStore'
+  const senderEmail = process.env.GMAIL_USER
+
+  await transporter.sendMail({
+    from:    `"${senderName}" <${senderEmail}>`,
     to:      email,
     subject: `${code} es tu código de verificación — TechStore`,
     html: `
@@ -66,4 +84,6 @@ export async function sendVerificationCode(email, name, code) {
       </html>
     `,
   })
+
+  console.log(`📧 Código enviado a ${email}`)
 }
