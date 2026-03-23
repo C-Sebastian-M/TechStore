@@ -85,10 +85,13 @@ function useGoogleOAuth(onSuccess) {
 
   const renderButton = useCallback((elementId) => {
     if (!clientId) return;
-    window.google?.accounts.id.renderButton(
-      document.getElementById(elementId),
-      { theme: 'filled_black', size: 'large', width: '100%', text: 'continue_with', shape: 'rectangular' }
-    );
+    const container = document.getElementById(elementId)
+    if (!container) return
+    const width = Math.min(container.offsetWidth || 400, 400)
+      window.google?.accounts.id.renderButton(container, {
+        theme: 'filled_black', size: 'large',
+        width, text: 'continue_with', shape: 'rectangular'
+      })
   }, [clientId]);
 
   return { prompt, renderButton };

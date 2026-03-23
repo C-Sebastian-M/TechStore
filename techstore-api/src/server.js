@@ -27,7 +27,12 @@ const isProd    = process.env.NODE_ENV === 'production'
 app.set('trust proxy', 1)
 
 // ─── 1. Helmet — headers HTTP de seguridad ────────────────────────────────────
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
+// crossOriginOpenerPolicy: false → necesario para que Google OAuth popup funcione.
+// Sin esto, Helmet envía COOP: same-origin que bloquea el postMessage de Google.
+app.use(helmet({
+  crossOriginResourcePolicy:  { policy: 'cross-origin' },
+  crossOriginOpenerPolicy:    false,
+}))
 
 // ─── 2. CORS ─────────────────────────────────────────────────────────────────
 const allowedOrigin = isProd
