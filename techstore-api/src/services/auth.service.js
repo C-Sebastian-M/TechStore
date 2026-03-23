@@ -40,9 +40,10 @@ export async function verifyRecaptcha(token) {
     body:    `secret=${secret}&response=${token}`,
   })
   const data = await res.json()
+  console.log('reCAPTCHA response:', JSON.stringify(data))
 
   if (!data.success || data.score < RECAPTCHA_THRESHOLD) {
-    const err = new Error('Verificación de seguridad fallida. Intenta de nuevo.')
+    const err = new Error(`Verificación fallida. Score: ${data.score ?? 'N/A'}, success: ${data.success}, errors: ${JSON.stringify(data['error-codes'])}`)
     err.statusCode = 403
     throw err
   }

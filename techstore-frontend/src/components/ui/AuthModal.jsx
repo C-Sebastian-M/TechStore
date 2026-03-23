@@ -48,9 +48,22 @@ function useRecaptcha() {
   }, [siteKey]);
 
   const execute = useCallback(async (action = 'register') => {
-    if (!siteKey) return 'dev-bypass';         // Sin key → bypass en desarrollo
-    await new Promise(r => setTimeout(r, 500)); // Esperar que grecaptcha cargue
-    return window.grecaptcha?.execute(siteKey, { action }) ?? 'dev-bypass';
+    if (!siteKey) return 'dev-bypass';
+    // Esperar hasta que grecaptcha esté completamente listo (máx 10s)
+    await new Promise((resolve, reject) => {
+      const start = Date.now();
+      const check = () => {
+        if (window.grecaptcha?.ready) {
+          window.grecaptcha.ready(resolve);
+        } else if (Date.now() - start > 10000) {
+          reject(new Error('reCAPTCHA no cargó'));
+        } else {
+          setTimeout(check, 100);
+        }
+      };
+      check();
+    });
+    return window.grecaptcha.execute(siteKey, { action });
   }, [siteKey]);
 
   return { execute };
