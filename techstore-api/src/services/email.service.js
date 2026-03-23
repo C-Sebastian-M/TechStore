@@ -2,7 +2,9 @@ import { Resend } from 'resend'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
-const FROM = 'TechStore <noreply@techstore.com>'
+// Para usar un dominio propio (ej: noreply@techstore.com) debes verificarlo en resend.com/domains
+// Mientras tanto, usar el dominio de prueba de Resend que funciona sin verificación
+const FROM = 'TechStore <techstore1420@gmail.com>'
 
 // ─── ENVIAR CÓDIGO DE VERIFICACIÓN ───────────────────────────────────────────
 export async function sendVerificationCode(email, name, code) {
