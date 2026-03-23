@@ -3,8 +3,8 @@ import api from './api.js'
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 
 // Registrar usuario nuevo → devuelve { user, token }
-export async function register(name, email, password) {
-  const data = await api.post('/auth/register', { name, email, password })
+export async function register(name, email, password, recaptchaToken) {
+  const data = await api.post('/auth/register', { name, email, password, recaptchaToken })
   // Guardar token y usuario en localStorage para persistencia
   localStorage.setItem('techstore_token', data.token)
   localStorage.setItem('techstore_user',  JSON.stringify(data.user))
@@ -14,6 +14,14 @@ export async function register(name, email, password) {
 // Iniciar sesión → devuelve { user, token }
 export async function login(email, password) {
   const data = await api.post('/auth/login', { email, password })
+  localStorage.setItem('techstore_token', data.token)
+  localStorage.setItem('techstore_user',  JSON.stringify(data.user))
+  return data
+}
+
+// Login con Google OAuth → devuelve { user, token }
+export async function loginWithGoogle(credential) {
+  const data = await api.post('/auth/google', { credential })
   localStorage.setItem('techstore_token', data.token)
   localStorage.setItem('techstore_user',  JSON.stringify(data.user))
   return data

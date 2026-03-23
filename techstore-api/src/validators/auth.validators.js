@@ -1,8 +1,6 @@
 import { z } from 'zod'
 
 // ─── REGISTRO ─────────────────────────────────────────────────────────────────
-// Contraseña: mínimo 8 caracteres, al menos 1 número.
-// En producción siempre exigir más que un mínimo de 6 caracteres simples.
 export const registerSchema = z.object({
   name:     z.string()
     .min(2,   'El nombre debe tener al menos 2 caracteres')
@@ -10,13 +8,14 @@ export const registerSchema = z.object({
     .trim(),
   email:    z.string()
     .email('Email inválido')
-    .max(254, 'Email demasiado largo')   // 254 es el límite RFC del email
+    .max(254, 'Email demasiado largo')
     .toLowerCase()
     .trim(),
   password: z.string()
     .min(8,   'La contraseña debe tener al menos 8 caracteres')
-    .max(72,  'La contraseña no puede superar 72 caracteres')  // límite de bcrypt
+    .max(72,  'La contraseña no puede superar 72 caracteres')
     .regex(/\d/, 'La contraseña debe contener al menos un número'),
+  recaptchaToken: z.string().min(1, 'Token reCAPTCHA requerido'),
 })
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
@@ -29,6 +28,11 @@ export const loginSchema = z.object({
   password: z.string()
     .min(1,  'La contraseña es requerida')
     .max(72, 'Contraseña inválida'),
+})
+
+// ─── GOOGLE OAUTH ─────────────────────────────────────────────────────────────
+export const googleAuthSchema = z.object({
+  credential: z.string().min(1, 'Token de Google requerido'),
 })
 
 // ─── ACTUALIZAR PERFIL ────────────────────────────────────────────────────────

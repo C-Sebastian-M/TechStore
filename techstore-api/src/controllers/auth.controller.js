@@ -1,5 +1,12 @@
 import * as authService from '../services/auth.service.js'
-import { registerSchema, loginSchema, updateProfileSchema, changePasswordSchema, addressSchema } from '../validators/auth.validators.js'
+import {
+  registerSchema,
+  loginSchema,
+  googleAuthSchema,
+  updateProfileSchema,
+  changePasswordSchema,
+  addressSchema,
+} from '../validators/auth.validators.js'
 
 // ─── POST /api/auth/register ─────────────────────────────────────────────────
 export async function register(req, res, next) {
@@ -15,6 +22,15 @@ export async function login(req, res, next) {
   try {
     const data   = loginSchema.parse(req.body)
     const result = await authService.login(data)
+    res.json(result)
+  } catch (err) { next(err) }
+}
+
+// ─── POST /api/auth/google ────────────────────────────────────────────────────
+export async function googleAuth(req, res, next) {
+  try {
+    const { credential } = googleAuthSchema.parse(req.body)
+    const result = await authService.loginWithGoogle(credential)
     res.json(result)
   } catch (err) { next(err) }
 }

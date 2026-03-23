@@ -5,10 +5,10 @@ const AuthContext = createContext()
 
 export function AuthProvider({ children }) {
   const [user,      setUser]      = useState(null)
-  const [loading,   setLoading]   = useState(true)   // true mientras verifica sesión guardada
+  const [loading,   setLoading]   = useState(true)
   const [authModal, setAuthModal] = useState({ open: false, tab: 'login' })
 
-  // ── Al montar: restaurar sesión guardada en localStorage ──────────────────
+  // ── Restaurar sesión al montar ────────────────────────────────────────────
   useEffect(() => {
     const session = authService.getSavedSession()
     if (session) setUser(session.user)
@@ -20,7 +20,7 @@ export function AuthProvider({ children }) {
   const openRegister = () => setAuthModal({ open: true,  tab: 'register' })
   const closeAuth    = () => setAuthModal({ open: false, tab: 'login'    })
 
-  // ── Login real ────────────────────────────────────────────────────────────
+  // ── Login con email/password ──────────────────────────────────────────────
   const login = async (email, password) => {
     const { user } = await authService.login(email, password)
     setUser(user)
@@ -28,9 +28,17 @@ export function AuthProvider({ children }) {
     return user
   }
 
-  // ── Registro real ─────────────────────────────────────────────────────────
-  const register = async (name, email, password) => {
-    const { user } = await authService.register(name, email, password)
+  // ── Registro con email/password + reCAPTCHA ───────────────────────────────
+  const register = async (name, email, password, recaptchaToken) => {
+    const { user } = await authService.register(name, email, password, recaptchaToken)
+    setUser(user)
+    closeAuth()
+    return user
+  }
+
+  // ── Login con Google OAuth ────────────────────────────────────────────────
+  const loginWithGoogle = async (credential) => {
+    const { user } = await authService.loginWithGoogle(credential)
     setUser(user)
     closeAuth()
     return user
@@ -42,14 +50,14 @@ export function AuthProvider({ children }) {
     setUser(null)
   }
 
-  // ── Actualizar datos del usuario en el estado local ───────────────────────
+  // ── Refrescar datos del usuario ───────────────────────────────────────────
   const refreshUser = async () => {
     try {
       const updated = await authService.getProfile()
       setUser(updated)
       localStorage.setItem('techstore_user', JSON.stringify(updated))
     } catch {
-      // Si falla, el token probablemente expiró — el api.js redirige automáticamente
+      // Token expirado — api.js redirige automáticamente
     }
   }
 
@@ -64,6 +72,7 @@ export function AuthProvider({ children }) {
       closeAuth,
       login,
       register,
+      loginWithGoogle,
       logout,
       refreshUser,
     }}>
