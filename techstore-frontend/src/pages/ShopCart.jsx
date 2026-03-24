@@ -255,7 +255,7 @@ export default function ShopCart() {
                   disabled={cartItems.length === 0}
                   className="w-full rounded-lg bg-primary py-4 text-center text-base font-bold text-white shadow-lg shadow-primary/20 hover:bg-blue-600 hover:shadow-primary/40 hover:-translate-y-0.5 transition-all active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                 >
-                  Proceder al Pago
+                  Simular Pedido (demo)
                 </button>
 
                 <div className="flex justify-center gap-4 mt-2 opacity-50 grayscale hover:grayscale-0 transition-all duration-500">
