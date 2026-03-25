@@ -23,7 +23,7 @@ export async function register(req, res, next) {
 // ─── POST /api/auth/verify-email — Paso 2: verificar y crear cuenta ──────────
 export async function verifyEmail(req, res, next) {
   try {
-    const data           = verifyCodeSchema.parse(req.body)
+    const data            = verifyCodeSchema.parse(req.body)
     const { user, token } = await authService.verifyCodeAndRegister(data)
     setAuthCookie(res, token)
     res.status(201).json({ user, token })
@@ -67,11 +67,20 @@ export async function updateMe(req, res, next) {
   } catch (err) { next(err) }
 }
 
-// ─── PUT /api/auth/me/password ────────────────────────────────────────────────
+// ─── PUT /api/auth/me/password — usuarios con contraseña propia ──────────────
 export async function changePassword(req, res, next) {
   try {
     const data   = changePasswordSchema.parse(req.body)
     const result = await authService.changePassword(req.user.id, data)
+    res.json(result)
+  } catch (err) { next(err) }
+}
+
+// ─── PUT /api/auth/me/set-password — solo usuarios de Google ─────────────────
+export async function setPassword(req, res, next) {
+  try {
+    const data   = setPasswordSchema.parse(req.body)
+    const result = await authService.setPassword(req.user.id, data)
     res.json(result)
   } catch (err) { next(err) }
 }

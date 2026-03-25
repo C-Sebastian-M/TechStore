@@ -71,6 +71,11 @@ export async function changePassword(currentPassword, newPassword) {
   return api.put('/auth/me/password', { currentPassword, newPassword })
 }
 
+// Solo para usuarios de Google — establece contraseña sin pedir la actual
+export async function setPassword(newPassword) {
+  return api.put('/auth/me/set-password', { newPassword })
+}
+
 // ─── DIRECCIONES ──────────────────────────────────────────────────────────────
 
 export async function addAddress(data) {
