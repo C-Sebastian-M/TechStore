@@ -59,6 +59,14 @@ export const changePasswordSchema = z.object({
     .regex(/\d/, 'La nueva contraseña debe contener al menos un número'),
 })
 
+// Para usuarios de Google que nunca tuvieron contraseña
+export const setPasswordSchema = z.object({
+  newPassword: z.string()
+    .min(8,  'La contraseña debe tener al menos 8 caracteres')
+    .max(72, 'La contraseña no puede superar 72 caracteres')
+    .regex(/\d/, 'La contraseña debe contener al menos un número'),
+})
+
 // ─── DIRECCIÓN ────────────────────────────────────────────────────────────────
 export const addressSchema = z.object({
   label:      z.string().max(50).default('Casa'),

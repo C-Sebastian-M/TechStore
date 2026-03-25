@@ -19,6 +19,7 @@ model User {
   phone         String?
   birthDate     DateTime?
   role          Role     @default(CUSTOMER)
+  googleAuth    Boolean  @default(false)   // true si se registró con Google OAuth
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

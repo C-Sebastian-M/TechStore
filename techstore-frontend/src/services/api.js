@@ -2,16 +2,21 @@
 const BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3001/api').replace(/\/+$/, '')
 
 // ─── CLIENTE HTTP CENTRAL ─────────────────────────────────────────────────────
-// El token JWT viaja en una cookie httpOnly gestionada automáticamente
-// por el navegador — no necesitamos leerlo ni adjuntarlo manualmente.
-// credentials: 'include' es obligatorio para que el navegador envíe la cookie
-// en peticiones cross-origin (frontend en Vercel → API en Vercel).
+// Estrategia dual de autenticación:
+// 1. Cookie httpOnly (preferida, más segura contra XSS)
+// 2. Authorization header como fallback (para casos donde la cookie
+//    no llega en cross-origin — ej. usuarios de Google en Vercel)
 
 async function request(endpoint, options = {}) {
+  const token = localStorage.getItem('techstore_token')
+
   const config = {
-    credentials: 'include',           // envía la cookie httpOnly en cada petición
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
+      // Fallback: si hay token en localStorage, también lo enviamos en el header
+      // El middleware del backend acepta ambos (cookie tiene prioridad)
+      ...(token && { Authorization: `Bearer ${token}` }),
       ...options.headers,
     },
     ...options,
@@ -22,6 +27,7 @@ async function request(endpoint, options = {}) {
   // Token expirado o inválido → limpiar sesión local y redirigir
   if (response.status === 401) {
     localStorage.removeItem('techstore_user')
+    localStorage.removeItem('techstore_token')
     window.location.href = '/'
     return
   }

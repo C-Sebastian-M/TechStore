@@ -7,6 +7,7 @@ import {
   googleAuthSchema,
   updateProfileSchema,
   changePasswordSchema,
+  setPasswordSchema,
   addressSchema,
 } from '../validators/auth.validators.js'
 

@@ -13,15 +13,16 @@ export async function register(name, email, password, recaptchaToken) {
 // Paso 2: verificar código y crear cuenta
 export async function verifyEmail(email, code) {
   const data = await api.post('/auth/verify-email', { email, code })
-  // Guardamos solo el user — el token queda en cookie httpOnly
-  localStorage.setItem('techstore_user', JSON.stringify(data.user))
+  localStorage.setItem('techstore_user',  JSON.stringify(data.user))
+  if (data.token) localStorage.setItem('techstore_token', data.token)
   return data
 }
 
 // Iniciar sesión
 export async function login(email, password) {
   const data = await api.post('/auth/login', { email, password })
-  localStorage.setItem('techstore_user', JSON.stringify(data.user))
+  localStorage.setItem('techstore_user',  JSON.stringify(data.user))
+  if (data.token) localStorage.setItem('techstore_token', data.token)
   return data
 }
 
@@ -29,6 +30,8 @@ export async function login(email, password) {
 export async function loginWithGoogle(credential) {
   const data = await api.post('/auth/google', { credential })
   localStorage.setItem('techstore_user', JSON.stringify(data.user))
+  // Guardar el token también para usarlo como fallback en Authorization header
+  if (data.token) localStorage.setItem('techstore_token', data.token)
   return data
 }
 
@@ -38,6 +41,7 @@ export async function logout() {
     await api.post('/auth/logout', {})
   } catch { /* si falla, igual limpiamos local */ }
   localStorage.removeItem('techstore_user')
+  localStorage.removeItem('techstore_token')
 }
 
 // Obtener sesión guardada (para restaurar al recargar)

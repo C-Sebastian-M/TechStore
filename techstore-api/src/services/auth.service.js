@@ -29,13 +29,14 @@ export function setAuthCookie(res, token) {
 
 // ─── CAMPOS PÚBLICOS DEL USUARIO ─────────────────────────────────────────────
 const PUBLIC_USER_FIELDS = {
-  id:        true,
-  email:     true,
-  name:      true,
-  phone:     true,
-  birthDate: true,
-  role:      true,
-  createdAt: true,
+  id:         true,
+  email:      true,
+  name:       true,
+  phone:      true,
+  birthDate:  true,
+  role:       true,
+  googleAuth: true,
+  createdAt:  true,
 }
 
 // ─── VERIFICAR RECAPTCHA v3 ───────────────────────────────────────────────────
@@ -220,7 +221,8 @@ export async function loginWithGoogle(credential) {
       data: {
         email,
         name,
-        password: await bcrypt.hash(Math.random().toString(36) + Date.now(), 10),
+        googleAuth: true,
+        password:   await bcrypt.hash(Math.random().toString(36) + Date.now(), 10),
       },
       select: PUBLIC_USER_FIELDS,
     })
@@ -291,6 +293,27 @@ export async function updateAddress(userId, addressId, data) {
     await prisma.address.updateMany({ where: { userId }, data: { isDefault: false } })
   }
   return prisma.address.update({ where: { id: addressId }, data })
+}
+
+// ─── ESTABLECER CONTRASEÑA (para usuarios de Google que no tienen una) ────────────
+export async function setPassword(userId, { newPassword }) {
+  const user = await prisma.user.findUnique({ where: { id: userId } })
+  if (!user) {
+    const err = new Error('Usuario no encontrado.')
+    err.statusCode = 404
+    throw err
+  }
+  if (!user.googleAuth) {
+    const err = new Error('Usa el formulario de cambio de contraseña normal.')
+    err.statusCode = 400
+    throw err
+  }
+  const hashed = await bcrypt.hash(newPassword, 10)
+  await prisma.user.update({
+    where: { id: userId },
+    data:  { password: hashed, googleAuth: false },  // ya tiene contraseña propia
+  })
+  return { message: 'Contraseña establecida correctamente. Ya puedes iniciar sesión con email y contraseña.' }
 }
 
 export async function deleteAddress(userId, addressId) {
