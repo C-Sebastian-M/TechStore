@@ -13,6 +13,7 @@
     "db:migrate": "npx prisma migrate dev",
     "db:generate": "npx prisma generate",
     "db:seed": "node prisma/seed.js",
+    "db:seed-products": "node prisma/seed-products.js",
     "db:studio": "npx prisma studio",
     "db:reset": "npx prisma migrate reset --force"
   },
