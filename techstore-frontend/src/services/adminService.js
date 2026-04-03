@@ -13,15 +13,25 @@ export async function uploadProductImage(file) {
   const formData = new FormData()
   formData.append('image', file)
 
+  const token = localStorage.getItem('techstore_token')
+
   const res = await fetch(`${BASE_URL}/upload/product-image`, {
     method:      'POST',
-    credentials: 'include',   // envía la cookie httpOnly — ya no usamos el token de localStorage
-    body:        formData,
-    // NO incluir Content-Type — el navegador lo pone automáticamente con boundary
+    credentials: 'include',
+    headers: {
+      // Fallback igual que api.js — el middleware acepta cookie O header
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
+    body: formData,
+    // NO incluir Content-Type — el navegador lo pone con boundary automáticamente
   })
 
   const data = await res.json().catch(() => null)
   if (!res.ok) throw new Error(data?.error || 'Error al subir la imagen.')
+
+  // En producción la URL ya es una Data URL completa (base64)
+  // En desarrollo es una ruta relativa como /uploads/products/prod_xxx.webp
+  if (data.url.startsWith('data:')) return data.url
 
   const serverBase = BASE_URL.replace('/api', '')
   return `${serverBase}${data.url}`
