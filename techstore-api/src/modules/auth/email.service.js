@@ -1,0 +1,65 @@
+import nodemailer from 'nodemailer'
+
+// ─── TRANSPORTER SINGLETON ────────────────────────────────────────────────────
+// Se crea una sola vez al iniciar el módulo y se reutiliza en cada envío.
+// Sin credenciales → modo DEV, imprime el código en consola.
+const transporter = (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD)
+  ? nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_APP_PASSWORD,
+      },
+    })
+  : null
+
+// ─── ENVIAR CÓDIGO DE VERIFICACIÓN ───────────────────────────────────────────
+export async function sendVerificationCode(email, name, code) {
+  if (!transporter) {
+    console.log(`\n📧 [DEV] Código de verificación para ${email}: ${code}\n`)
+    return
+  }
+
+  await transporter.sendMail({
+    from:    `"TechStore" <${process.env.GMAIL_USER}>`,
+    to:      email,
+    subject: `${code} es tu código de verificación — TechStore`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+        <head><meta charset="utf-8"></head>
+        <body style="margin:0;padding:0;background:#0a1520;font-family:system-ui,sans-serif;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a1520;padding:40px 20px;">
+            <tr><td align="center">
+              <table width="480" cellpadding="0" cellspacing="0" style="background:#111e2e;border-radius:16px;border:1px solid #1e3a5a;overflow:hidden;">
+                <tr><td style="background:linear-gradient(135deg,#137fec,#06b6d4);padding:32px;text-align:center;">
+                  <div style="display:inline-flex;align-items:center;gap:10px;">
+                    <div style="width:36px;height:36px;background:rgba(255,255,255,0.2);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;">
+                      <span style="color:white;font-size:18px;">⚡</span>
+                    </div>
+                    <span style="color:white;font-size:22px;font-weight:800;letter-spacing:-0.5px;">TechStore</span>
+                  </div>
+                </td></tr>
+                <tr><td style="padding:40px 36px;">
+                  <h1 style="color:white;font-size:22px;font-weight:700;margin:0 0 8px;">Verificación de correo</h1>
+                  <p style="color:#94a3b8;font-size:15px;margin:0 0 32px;">Hola <strong style="color:white;">${name}</strong>, usa este código para confirmar tu correo:</p>
+                  <div style="background:#0a1520;border:2px solid #137fec;border-radius:12px;padding:24px;text-align:center;margin-bottom:32px;">
+                    <span style="font-size:42px;font-weight:900;letter-spacing:12px;color:#137fec;font-family:monospace;">${code}</span>
+                    <p style="color:#64748b;font-size:13px;margin:12px 0 0;">Válido por <strong style="color:#94a3b8;">10 minutos</strong></p>
+                  </div>
+                  <p style="color:#64748b;font-size:13px;margin:0;line-height:1.6;">
+                    Si no solicitaste esta verificación, ignora este correo.<br>
+                    Nunca compartiremos tu código con nadie.
+                  </p>
+                </td></tr>
+                <tr><td style="padding:20px 36px;border-top:1px solid #1e3a5a;text-align:center;">
+                  <p style="color:#334155;font-size:12px;margin:0;">© 2025 TechStore Colombia · Medellín, Colombia</p>
+                </td></tr>
+              </table>
+            </td></tr>
+          </table>
+        </body>
+      </html>
+    `,
+  })
+}
