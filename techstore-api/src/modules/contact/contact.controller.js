@@ -1,17 +1,14 @@
-import { contactSchema } from './contact.validators.js'
+// ─── ContactController — S + D ────────────────────────────────────────────────
+// S: solo orquesta HTTP ↔ ContactService.
+// D: depende de ContactService (abstracción), no del canal de notificación directamente.
+
+import { contactSchema }   from './contact.validators.js'
+import { ContactService }  from './contact.service.js'
 
 export async function sendMessage(req, res, next) {
   try {
-    const data = contactSchema.parse(req.body)
-
-    // En producción: integrar con Nodemailer / Resend / SendGrid
-    console.log('\n📩 Nuevo mensaje de contacto:')
-    console.log(`  De:      ${data.name} <${data.email}>`)
-    console.log(`  Asunto:  ${data.topic}`)
-    console.log(`  Mensaje: ${data.message}\n`)
-
-    res.status(201).json({
-      message: 'Mensaje recibido. Te responderemos en menos de 24 horas.',
-    })
+    const data   = contactSchema.parse(req.body)
+    const result = await ContactService.processMessage(data)
+    res.status(201).json(result)
   } catch (err) { next(err) }
 }

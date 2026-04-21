@@ -1,13 +1,15 @@
+// ─── ProductService — S + D ───────────────────────────────────────────────────
+// S: una sola responsabilidad — lógica de negocio de productos y categorías.
+// D: depende de AppError (abstracción), no lanza errores crudos.
+
 import prisma from '../../config/prisma.js'
+import { NotFoundError } from '../../shared/errors/AppError.js'
 
 // ─── LISTAR PRODUCTOS ─────────────────────────────────────────────────────────
 export async function getProducts({ page, limit, category, search, minPrice, maxPrice, sortBy, sortOrder, includeInactive = false, isActive }) {
   const skip  = (page - 1) * limit
   const where = {
-    ...(isActive !== undefined
-      ? { isActive }
-      : includeInactive ? {} : { isActive: true }
-    ),
+    ...(isActive !== undefined ? { isActive } : includeInactive ? {} : { isActive: true }),
     ...(category && { category: { slug: category } }),
     ...(search && {
       OR: [
@@ -44,17 +46,12 @@ export async function getProducts({ page, limit, category, search, minPrice, max
   }
 }
 
-// ─── OBTENER UN PRODUCTO ──────────────────────────────────────────────────────
 export async function getProductById(id) {
   const product = await prisma.product.findFirst({
     where:   { id, isActive: true },
     include: { category: { select: { name: true, slug: true } } },
   })
-  if (!product) {
-    const err = new Error('Producto no encontrado.')
-    err.statusCode = 404
-    throw err
-  }
+  if (!product) throw new NotFoundError('Producto')
   return product
 }
 
@@ -68,25 +65,16 @@ export async function createProduct(data) {
 
 export async function updateProduct(id, data) {
   const exists = await prisma.product.findUnique({ where: { id } })
-  if (!exists) {
-    const err = new Error('Producto no encontrado.')
-    err.statusCode = 404
-    throw err
-  }
+  if (!exists) throw new NotFoundError('Producto')
   return prisma.product.update({
-    where:   { id },
-    data,
+    where: { id }, data,
     include: { category: { select: { name: true, slug: true } } },
   })
 }
 
 export async function deleteProduct(id) {
   const exists = await prisma.product.findUnique({ where: { id } })
-  if (!exists) {
-    const err = new Error('Producto no encontrado.')
-    err.statusCode = 404
-    throw err
-  }
+  if (!exists) throw new NotFoundError('Producto')
   await prisma.product.update({ where: { id }, data: { isActive: false } })
   return { message: 'Producto desactivado correctamente.' }
 }
@@ -111,11 +99,8 @@ export async function getFavorites(userId) {
 
 export async function toggleFavorite(userId, productId) {
   const product = await prisma.product.findUnique({ where: { id: productId } })
-  if (!product) {
-    const err = new Error('Producto no encontrado.')
-    err.statusCode = 404
-    throw err
-  }
+  if (!product) throw new NotFoundError('Producto')
+
   const existing = await prisma.favorite.findUnique({
     where: { userId_productId: { userId, productId } },
   })

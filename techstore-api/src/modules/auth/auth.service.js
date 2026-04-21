@@ -1,70 +1,37 @@
-import bcrypt           from 'bcryptjs'
-import jwt              from 'jsonwebtoken'
-import { OAuth2Client } from 'google-auth-library'
-import prisma           from '../../config/prisma.js'
-import { sendVerificationCode as sendEmail } from './email.service.js'
+// ─── AuthService — S: una sola responsabilidad: autenticación ────────────────────
+// Solo maneja: registro con email, verificación de código, login, Google OAuth.
+// Perfil y direcciones viven en sus propios servicios (profile.service, address.service).
+//
+// D: depende de abstracciones (TokenService, PasswordService, EmailService, RecaptchaService)
+//    no de implementaciones concretas (jwt, bcrypt, nodemailer, google-auth-library).
 
+import { OAuth2Client }    from 'google-auth-library'
+import prisma              from '../../config/prisma.js'
+import { TokenService }    from '../../shared/utils/TokenService.js'
+import { PasswordService } from '../../shared/utils/PasswordService.js'
+import { EmailService }    from './email.service.js'
+import { RecaptchaService }from './recaptcha.service.js'
+import {
+  ConflictError, ValidationError, UnauthorizedError, TooManyRequestsError,
+} from '../../shared/errors/AppError.js'
+
+// D: la dependencia de Google se instancia una vez — fácil de mockear en tests
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
 
-// ─── HELPERS PRIVADOS ─────────────────────────────────────────────────────────
-function generateToken(userId) {
-  return jwt.sign(
-    { id: userId },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '1d' }
-  )
-}
+const MAX_VERIFY_ATTEMPTS = 5
 
 const PUBLIC_USER_FIELDS = {
   id: true, email: true, name: true, phone: true,
   birthDate: true, role: true, googleAuth: true, createdAt: true,
 }
 
-// ─── SETEAR COOKIE httpOnly ───────────────────────────────────────────────────
-export function setAuthCookie(res, token) {
-  const isProd = process.env.NODE_ENV === 'production'
-  res.cookie('token', token, {
-    httpOnly: true,
-    secure:   isProd,
-    sameSite: isProd ? 'none' : 'lax',
-    maxAge:   24 * 60 * 60 * 1000,
-    path:     '/',
-  })
-}
-
-// ─── RECAPTCHA v3 ─────────────────────────────────────────────────────────────
-const RECAPTCHA_THRESHOLD = 0.5
-
-export async function verifyRecaptcha(token) {
-  const secret = process.env.RECAPTCHA_SECRET_KEY
-  if (!secret) {
-    console.warn('RECAPTCHA_SECRET_KEY no configurado — omitiendo verificación')
-    return true
-  }
-  const res  = await fetch('https://www.google.com/recaptcha/api/siteverify', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body:    `secret=${secret}&response=${token}`,
-  })
-  const data = await res.json()
-  if (!data.success || data.score < RECAPTCHA_THRESHOLD) {
-    const err = new Error('Verificación de seguridad fallida. Intenta de nuevo.')
-    err.statusCode = 403
-    throw err
-  }
-  return true
-}
-
 // ─── PASO 1: ENVIAR CÓDIGO DE VERIFICACIÓN ───────────────────────────────────
 export async function sendVerificationCode({ name, email, password, recaptchaToken }) {
-  await verifyRecaptcha(recaptchaToken)
+  // D: depende de RecaptchaService, no de fetch+Google directamente
+  await RecaptchaService.verify(recaptchaToken)
 
   const existing = await prisma.user.findUnique({ where: { email } })
-  if (existing) {
-    const err = new Error('Ya existe una cuenta con ese email.')
-    err.statusCode = 409
-    throw err
-  }
+  if (existing) throw new ConflictError('Ya existe una cuenta con ese email.')
 
   // Rate limit por email: 60s entre reenvíos
   const pending = await prisma.emailVerification.findUnique({ where: { email } })
@@ -72,14 +39,13 @@ export async function sendVerificationCode({ name, email, password, recaptchaTok
     const secondsSinceSent = (Date.now() - new Date(pending.createdAt).getTime()) / 1000
     if (secondsSinceSent < 60) {
       const wait = Math.ceil(60 - secondsSinceSent)
-      const err  = new Error(`Espera ${wait} segundo${wait !== 1 ? 's' : ''} antes de solicitar un nuevo código.`)
-      err.statusCode = 429
-      throw err
+      throw new TooManyRequestsError(`Espera ${wait} segundo${wait !== 1 ? 's' : ''} antes de solicitar un nuevo código.`)
     }
   }
 
   const code           = String(Math.floor(100000 + Math.random() * 900000))
-  const hashedPassword = await bcrypt.hash(password, 10)
+  // D: depende de PasswordService, no de bcrypt directamente
+  const hashedPassword = await PasswordService.hash(password)
   const expiresAt      = new Date(Date.now() + 10 * 60 * 1000)
 
   await prisma.emailVerification.upsert({
@@ -88,48 +54,38 @@ export async function sendVerificationCode({ name, email, password, recaptchaTok
     create: { email, name, password: hashedPassword, code, expiresAt },
   })
 
-  await sendEmail(email, name, code)
+  // D: depende de EmailService, no de nodemailer directamente
+  await EmailService.sendVerificationCode(email, name, code)
   return { message: 'Código enviado. Revisa tu correo.' }
 }
 
-export const register = sendVerificationCode
-
 // ─── PASO 2: VERIFICAR CÓDIGO Y CREAR CUENTA ─────────────────────────────────
-const MAX_VERIFY_ATTEMPTS = 5
-
 export async function verifyCodeAndRegister({ email, code }) {
   const record = await prisma.emailVerification.findUnique({ where: { email } })
 
-  if (!record) {
-    const err = new Error('No hay verificación pendiente para este email.')
-    err.statusCode = 400
-    throw err
-  }
+  if (!record) throw new ValidationError('No hay verificación pendiente para este email.')
+
   if (new Date() > record.expiresAt) {
     await prisma.emailVerification.delete({ where: { email } })
-    const err = new Error('El código expiró. Solicita uno nuevo.')
-    err.statusCode = 400
-    throw err
+    throw new ValidationError('El código expiró. Solicita uno nuevo.')
   }
+
   if (record.attempts >= MAX_VERIFY_ATTEMPTS) {
     await prisma.emailVerification.delete({ where: { email } })
-    const err = new Error('Demasiados intentos fallidos. Solicita un nuevo código.')
-    err.statusCode = 429
-    throw err
+    throw new TooManyRequestsError('Demasiados intentos fallidos. Solicita un nuevo código.')
   }
+
   if (record.code !== code.trim()) {
     await prisma.emailVerification.update({
       where: { email },
       data:  { attempts: { increment: 1 } },
     })
     const remaining = MAX_VERIFY_ATTEMPTS - record.attempts - 1
-    const err = new Error(
+    throw new ValidationError(
       remaining > 0
         ? `Código incorrecto. Te quedan ${remaining} intento${remaining !== 1 ? 's' : ''}.`
         : 'Código incorrecto. Se agotaron los intentos, solicita uno nuevo.'
     )
-    err.statusCode = 400
-    throw err
   }
 
   const [user] = await prisma.$transaction([
@@ -140,7 +96,7 @@ export async function verifyCodeAndRegister({ email, code }) {
     prisma.emailVerification.delete({ where: { email } }),
   ])
 
-  const token = generateToken(user.id)
+  const token = TokenService.generate(user.id)
   return { user, token }
 }
 
@@ -150,20 +106,16 @@ export async function login({ email, password }) {
   const INVALID_MSG = 'Email o contraseña incorrectos.'
 
   if (!user) {
-    await bcrypt.compare(password, '$2b$10$invalidhashplaceholderfortimingg')
-    const err = new Error(INVALID_MSG)
-    err.statusCode = 401
-    throw err
-  }
-  const isMatch = await bcrypt.compare(password, user.password)
-  if (!isMatch) {
-    const err = new Error(INVALID_MSG)
-    err.statusCode = 401
-    throw err
+    // Comparación dummy para evitar timing attacks
+    await PasswordService.compare(password, '$2b$10$invalidhashplaceholderfortimingg')
+    throw new UnauthorizedError(INVALID_MSG)
   }
 
+  const isMatch = await PasswordService.compare(password, user.password)
+  if (!isMatch) throw new UnauthorizedError(INVALID_MSG)
+
   const { password: _pw, ...publicUser } = user
-  const token = generateToken(user.id)
+  const token = TokenService.generate(user.id)
   return { user: publicUser, token }
 }
 
@@ -177,16 +129,10 @@ export async function loginWithGoogle(credential) {
     })
     payload = ticket.getPayload()
   } catch {
-    const err = new Error('Token de Google inválido.')
-    err.statusCode = 401
-    throw err
+    throw new UnauthorizedError('Token de Google inválido.')
   }
 
-  if (!payload?.email_verified) {
-    const err = new Error('El correo de Google no está verificado.')
-    err.statusCode = 401
-    throw err
-  }
+  if (!payload?.email_verified) throw new UnauthorizedError('El correo de Google no está verificado.')
 
   const email = payload.email.toLowerCase()
   const name  = payload.name || payload.given_name || email.split('@')[0]
@@ -196,98 +142,12 @@ export async function loginWithGoogle(credential) {
     user = await prisma.user.create({
       data: {
         email, name, googleAuth: true,
-        password: await bcrypt.hash(Math.random().toString(36) + Date.now(), 10),
+        password: await PasswordService.hash(PasswordService.generateRandom()),
       },
       select: PUBLIC_USER_FIELDS,
     })
   }
 
-  const token = generateToken(user.id)
+  const token = TokenService.generate(user.id)
   return { user, token }
-}
-
-// ─── PERFIL ───────────────────────────────────────────────────────────────────
-export async function getProfile(userId) {
-  const user = await prisma.user.findUnique({
-    where:  { id: userId },
-    select: { ...PUBLIC_USER_FIELDS, addresses: true },
-  })
-  if (!user) {
-    const err = new Error('Usuario no encontrado.')
-    err.statusCode = 404
-    throw err
-  }
-  return user
-}
-
-export async function updateProfile(userId, data) {
-  return prisma.user.update({ where: { id: userId }, data, select: PUBLIC_USER_FIELDS })
-}
-
-// ─── CONTRASEÑAS ─────────────────────────────────────────────────────────────
-export async function changePassword(userId, { currentPassword, newPassword }) {
-  const user = await prisma.user.findUnique({ where: { id: userId } })
-  if (!user) {
-    const err = new Error('Usuario no encontrado.')
-    err.statusCode = 404
-    throw err
-  }
-  const isMatch = await bcrypt.compare(currentPassword, user.password)
-  if (!isMatch) {
-    const err = new Error('La contraseña actual es incorrecta.')
-    err.statusCode = 400
-    throw err
-  }
-  const hashed = await bcrypt.hash(newPassword, 10)
-  await prisma.user.update({ where: { id: userId }, data: { password: hashed } })
-  return { message: 'Contraseña actualizada correctamente.' }
-}
-
-export async function setPassword(userId, { newPassword }) {
-  const user = await prisma.user.findUnique({ where: { id: userId } })
-  if (!user) {
-    const err = new Error('Usuario no encontrado.')
-    err.statusCode = 404
-    throw err
-  }
-  if (!user.googleAuth) {
-    const err = new Error('Usa el formulario de cambio de contraseña normal.')
-    err.statusCode = 400
-    throw err
-  }
-  const hashed = await bcrypt.hash(newPassword, 10)
-  await prisma.user.update({ where: { id: userId }, data: { password: hashed, googleAuth: false } })
-  return { message: 'Contraseña establecida correctamente. Ya puedes iniciar sesión con email y contraseña.' }
-}
-
-// ─── DIRECCIONES ──────────────────────────────────────────────────────────────
-export async function addAddress(userId, data) {
-  if (data.isDefault) {
-    await prisma.address.updateMany({ where: { userId }, data: { isDefault: false } })
-  }
-  return prisma.address.create({ data: { ...data, userId } })
-}
-
-export async function updateAddress(userId, addressId, data) {
-  const address = await prisma.address.findFirst({ where: { id: addressId, userId } })
-  if (!address) {
-    const err = new Error('Dirección no encontrada.')
-    err.statusCode = 404
-    throw err
-  }
-  if (data.isDefault) {
-    await prisma.address.updateMany({ where: { userId }, data: { isDefault: false } })
-  }
-  return prisma.address.update({ where: { id: addressId }, data })
-}
-
-export async function deleteAddress(userId, addressId) {
-  const address = await prisma.address.findFirst({ where: { id: addressId, userId } })
-  if (!address) {
-    const err = new Error('Dirección no encontrada.')
-    err.statusCode = 404
-    throw err
-  }
-  await prisma.address.delete({ where: { id: addressId } })
-  return { message: 'Dirección eliminada.' }
 }

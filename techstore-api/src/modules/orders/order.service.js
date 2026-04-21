@@ -1,11 +1,15 @@
-import prisma from '../../config/prisma.js'
+// ─── OrderService — S + D ─────────────────────────────────────────────────────
+// S: una sola responsabilidad — lógica de negocio de pedidos.
+// D: depende de AppError (abstracción) y constantes de entorno, no hardcodeadas.
 
-// ─── CONSTANTES DE NEGOCIO ────────────────────────────────────────────────────
+import prisma from '../../config/prisma.js'
+import { NotFoundError, ValidationError } from '../../shared/errors/AppError.js'
+
+// D: constantes vienen de entorno — para cambiarlas no hace falta tocar código
 const TAX_RATE                = Number(process.env.TAX_RATE)                || 0.19
 const SHIPPING_COST           = Number(process.env.SHIPPING_COST)           || 24.99
 const FREE_SHIPPING_THRESHOLD = Number(process.env.FREE_SHIPPING_THRESHOLD) || 150
 
-// Códigos promocionales — en producción deberían vivir en BD
 const PROMO_CODES = {
   TECHSTORE10: 0.10,
   BIENVENIDO:  0.15,
@@ -22,28 +26,22 @@ function generateOrderNumber() {
 export async function createOrder(userId, { items, shipping, paymentMethod, promoCode }) {
   return prisma.$transaction(async (tx) => {
 
-    // 1. Verificar stock
     const productIds = items.map(i => i.productId)
     const products   = await tx.product.findMany({
       where: { id: { in: productIds }, isActive: true },
     })
 
     if (products.length !== items.length) {
-      const err = new Error('Uno o más productos no están disponibles.')
-      err.statusCode = 400
-      throw err
+      throw new ValidationError('Uno o más productos no están disponibles.')
     }
 
     for (const item of items) {
       const product = products.find(p => p.id === item.productId)
       if (product.stock < item.qty) {
-        const err = new Error(`Stock insuficiente para: ${product.name} (disponible: ${product.stock})`)
-        err.statusCode = 400
-        throw err
+        throw new ValidationError(`Stock insuficiente para: ${product.name} (disponible: ${product.stock})`)
       }
     }
 
-    // 2. Calcular totales
     const subtotal = items.reduce((sum, item) => {
       const product = products.find(p => p.id === item.productId)
       return sum + Number(product.price) * item.qty
@@ -56,16 +54,13 @@ export async function createOrder(userId, { items, shipping, paymentMethod, prom
     const shippingCost       = discountedSubtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_COST
     const total              = discountedSubtotal + tax + shippingCost
 
-    // 3. Crear pedido
     const order = await tx.order.create({
       data: {
-        orderNumber:        generateOrderNumber(),
-        userId,
-        paymentMethod,
+        orderNumber: generateOrderNumber(),
+        userId, paymentMethod,
         promoCode:          promoCode?.toUpperCase() || null,
         subtotal, discount, tax,
-        shipping:           shippingCost,
-        total,
+        shipping:           shippingCost, total,
         shippingName:       shipping.fullName,
         shippingAddress:    shipping.address,
         shippingCity:       shipping.city,
@@ -83,7 +78,6 @@ export async function createOrder(userId, { items, shipping, paymentMethod, prom
       },
     })
 
-    // 4. Descontar stock
     for (const item of items) {
       await tx.product.update({
         where: { id: item.productId },
@@ -100,11 +94,8 @@ export async function getOrdersByUser(userId, { page = 1, limit = 20 } = {}) {
   const skip = (page - 1) * limit
   const [orders, total] = await Promise.all([
     prisma.order.findMany({
-      where:   { userId },
-      skip, take: limit,
-      include: {
-        items: { include: { product: { select: { name: true, brand: true, image: true, price: true } } } },
-      },
+      where: { userId }, skip, take: limit,
+      include: { items: { include: { product: { select: { name: true, brand: true, image: true, price: true } } } } },
       orderBy: { createdAt: 'desc' },
     }),
     prisma.order.count({ where: { userId } }),
@@ -112,30 +103,19 @@ export async function getOrdersByUser(userId, { page = 1, limit = 20 } = {}) {
   return { data: orders, pagination: { total, page, limit, totalPages: Math.ceil(total / limit) } }
 }
 
-// ─── OBTENER UN PEDIDO ────────────────────────────────────────────────────────
 export async function getOrderById(orderId, userId) {
   const order = await prisma.order.findFirst({
-    where:   { id: orderId, userId },
-    include: {
-      items: { include: { product: { select: { name: true, brand: true, image: true, price: true } } } },
-    },
+    where: { id: orderId, userId },
+    include: { items: { include: { product: { select: { name: true, brand: true, image: true, price: true } } } } },
   })
-  if (!order) {
-    const err = new Error('Pedido no encontrado.')
-    err.statusCode = 404
-    throw err
-  }
+  if (!order) throw new NotFoundError('Pedido')
   return order
 }
 
 // ─── ADMIN ────────────────────────────────────────────────────────────────────
 export async function updateOrderStatus(orderId, status) {
   const order = await prisma.order.findUnique({ where: { id: orderId } })
-  if (!order) {
-    const err = new Error('Pedido no encontrado.')
-    err.statusCode = 404
-    throw err
-  }
+  if (!order) throw new NotFoundError('Pedido')
   return prisma.order.update({ where: { id: orderId }, data: { status } })
 }
 

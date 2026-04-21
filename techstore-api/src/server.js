@@ -17,6 +17,7 @@ import uploadRoutes  from './modules/upload/upload.routes.js'
 
 // ─── SHARED ───────────────────────────────────────────────────────────────────
 import { notFound, errorHandler } from './shared/middleware/error.middleware.js'
+import { TokenService }           from './shared/utils/TokenService.js'
 
 const app       = express()
 const PORT      = process.env.PORT || 3001
@@ -73,14 +74,9 @@ app.get('/health', (_req, res) =>
   res.json({ status: 'ok', env: process.env.NODE_ENV, ts: new Date().toISOString() })
 )
 
-// ─── 8. Logout — limpia la cookie httpOnly ────────────────────────────────────
+// ─── 8. Logout — D: delega en TokenService, no usa res.clearCookie directamente
 app.post('/api/auth/logout', (_req, res) => {
-  res.clearCookie('token', {
-    httpOnly: true,
-    secure:   isProd,
-    sameSite: isProd ? 'none' : 'lax',
-    path:     '/',
-  })
+  TokenService.clearCookie(res)
   res.json({ message: 'Sesión cerrada.' })
 })
 
