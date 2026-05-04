@@ -8,16 +8,25 @@ import { fileURLToPath } from 'url'
 import path              from 'path'
 
 // ─── MÓDULOS ──────────────────────────────────────────────────────────────────
-import authRoutes    from './modules/auth/auth.routes.js'
-import productRoutes from './modules/products/product.routes.js'
-import orderRoutes   from './modules/orders/order.routes.js'
-import adminRoutes   from './modules/admin/admin.routes.js'
-import contactRoutes from './modules/contact/contact.routes.js'
-import uploadRoutes  from './modules/upload/upload.routes.js'
+let authRoutes, productRoutes, orderRoutes, adminRoutes, contactRoutes, uploadRoutes
+let notFound, errorHandler, TokenService
 
-// ─── SHARED ───────────────────────────────────────────────────────────────────
-import { notFound, errorHandler } from './shared/middleware/error.middleware.js'
-import { TokenService }           from './shared/utils/TokenService.js'
+try {
+  authRoutes    = (await import('./modules/auth/auth.routes.js')).default
+  productRoutes = (await import('./modules/products/product.routes.js')).default
+  orderRoutes   = (await import('./modules/orders/order.routes.js')).default
+  adminRoutes   = (await import('./modules/admin/admin.routes.js')).default
+  contactRoutes = (await import('./modules/contact/contact.routes.js')).default
+  uploadRoutes  = (await import('./modules/upload/upload.routes.js')).default
+  const errorMw = await import('./shared/middleware/error.middleware.js')
+  notFound      = errorMw.notFound
+  errorHandler  = errorMw.errorHandler
+  TokenService  = (await import('./shared/utils/TokenService.js')).TokenService
+} catch (err) {
+  console.error('❌ ERROR AL IMPORTAR MÓDULOS:', err.message)
+  console.error(err.stack)
+  process.exit(1)
+}
 
 const app       = express()
 const PORT      = process.env.PORT || 3001
