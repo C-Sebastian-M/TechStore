@@ -8,25 +8,16 @@ import { fileURLToPath } from 'url'
 import path              from 'path'
 
 // ─── MÓDULOS ──────────────────────────────────────────────────────────────────
-let authRoutes, productRoutes, orderRoutes, adminRoutes, contactRoutes, uploadRoutes
-let notFound, errorHandler, TokenService
+import authRoutes    from './modules/auth/auth.routes.js'
+import productRoutes from './modules/products/product.routes.js'
+import orderRoutes   from './modules/orders/order.routes.js'
+import adminRoutes   from './modules/admin/admin.routes.js'
+import contactRoutes from './modules/contact/contact.routes.js'
+import uploadRoutes  from './modules/upload/upload.routes.js'
 
-try {
-  authRoutes    = (await import('./modules/auth/auth.routes.js')).default
-  productRoutes = (await import('./modules/products/product.routes.js')).default
-  orderRoutes   = (await import('./modules/orders/order.routes.js')).default
-  adminRoutes   = (await import('./modules/admin/admin.routes.js')).default
-  contactRoutes = (await import('./modules/contact/contact.routes.js')).default
-  uploadRoutes  = (await import('./modules/upload/upload.routes.js')).default
-  const errorMw = await import('./shared/middleware/error.middleware.js')
-  notFound      = errorMw.notFound
-  errorHandler  = errorMw.errorHandler
-  TokenService  = (await import('./shared/utils/TokenService.js')).TokenService
-} catch (err) {
-  console.error('❌ ERROR AL IMPORTAR MÓDULOS:', err.message)
-  console.error(err.stack)
-  process.exit(1)
-}
+// ─── SHARED ───────────────────────────────────────────────────────────────────
+import { notFound, errorHandler } from './shared/middleware/error.middleware.js'
+import { TokenService }           from './shared/utils/TokenService.js'
 
 const app       = express()
 const PORT      = process.env.PORT || 3001
@@ -39,7 +30,7 @@ app.set('trust proxy', 1)
 // ─── 2. Helmet ────────────────────────────────────────────────────────────────
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
-  crossOriginOpenerPolicy:   false,   // necesario para Google OAuth popup
+  crossOriginOpenerPolicy:   false,
 }))
 
 // ─── 3. CORS ──────────────────────────────────────────────────────────────────
@@ -48,13 +39,13 @@ const allowedOrigin = isProd
   : (process.env.CLIENT_URL || 'http://localhost:5173')
 
 if (isProd && !allowedOrigin) {
-  console.error('❌ FATAL: CLIENT_URL no definido en producción.')
+  console.error('FATAL: CLIENT_URL no definido en producción.')
   process.exit(1)
 }
 
 app.use(cors({
   origin:      allowedOrigin,
-  credentials: true,   // necesario para cookies httpOnly cross-origin
+  credentials: true,
   methods:     ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 }))
 
@@ -83,25 +74,13 @@ app.get('/health', (_req, res) =>
   res.json({ status: 'ok', env: process.env.NODE_ENV, ts: new Date().toISOString() })
 )
 
-// ─── 8. Logout — D: delega en TokenService, no usa res.clearCookie directamente
+// ─── 8. Logout ────────────────────────────────────────────────────────────────
 app.post('/api/auth/logout', (_req, res) => {
   TokenService.clearCookie(res)
   res.json({ message: 'Sesión cerrada.' })
 })
 
-// ─── 9. Rutas de la API ───────────────────────────────────────────────────────
-//
-//  Arquitectura: Layered + Modular
-//  ┌─────────────────────────────────────────────────┐
-//  │  src/modules/                                   │
-//  │    auth/     → /api/auth                        │
-//  │    products/ → /api/products                    │
-//  │    orders/   → /api/orders                      │
-//  │    admin/    → /api/admin                       │
-//  │    contact/  → /api/contact                     │
-//  │    upload/   → /api/upload                      │
-//  └─────────────────────────────────────────────────┘
-//
+// ─── 9. Rutas ─────────────────────────────────────────────────────────────────
 app.use('/api/auth',     authRoutes)
 app.use('/api/products', productRoutes)
 app.use('/api/orders',   orderRoutes)
@@ -113,14 +92,14 @@ app.use('/api/upload',   uploadRoutes)
 app.use(notFound)
 app.use(errorHandler)
 
-// ─── Inicio (no ejecutar en modo test) ────────────────────────────────────────
+// ─── Inicio ───────────────────────────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {
-    console.log(`\n🚀  TechStore API corriendo en http://localhost:${PORT}`)
-    console.log(`📋  Entorno : ${process.env.NODE_ENV || 'development'}`)
-    console.log(`🔗  CORS    : ${allowedOrigin}`)
-    console.log(`\n📦  Módulos activos:`)
-    console.log(`    auth · products · orders · admin · contact · upload`)
+    if (!isProd) {
+      console.log(`\n🚀  TechStore API → http://localhost:${PORT}`)
+      console.log(`📋  Entorno: ${process.env.NODE_ENV || 'development'}`)
+      console.log(`🔗  CORS:    ${allowedOrigin}\n`)
+    }
   })
 }
 
