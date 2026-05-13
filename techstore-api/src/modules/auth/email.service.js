@@ -4,30 +4,33 @@
 // L: puede ser sustituido por cualquier implementación que respete el contrato
 //    (Nodemailer → SendGrid → Resend) sin que auth.service lo note.
 
-import nodemailer from 'nodemailer'
+import nodemailer from "nodemailer";
 
 // Transporter singleton — se crea una vez al iniciar el módulo
-const transporter = (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD)
-  ? nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD },
-    })
-  : null
+const transporter =
+  process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD
+    ? nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+          user: process.env.GMAIL_USER,
+          pass: process.env.GMAIL_APP_PASSWORD,
+        },
+      })
+    : null;
 
 export const EmailService = {
-
   // ─── Enviar código de verificación de email ─────────────────────────────────
   async sendVerificationCode(email, name, code) {
     if (!transporter) {
-      console.log(`\n📧 [DEV] Código de verificación para ${email}: ${code}\n`)
-      return
+      console.log(`\n📧 [DEV] Código de verificación para ${email}: ${code}\n`);
+      return;
     }
     await transporter.sendMail({
-      from:    `"TechStore" <${process.env.GMAIL_USER}>`,
-      to:      email,
+      from: `"TechStore" <${process.env.GMAIL_USER}>`,
+      to: email,
       subject: `${code} es tu código de verificación — TechStore`,
-      html:    this._buildVerificationTemplate(name, code),
-    })
+      html: this._buildVerificationTemplate(name, code),
+    });
   },
 
   // ─── Template privado del email ──────────────────────────────────────────────
@@ -66,6 +69,6 @@ export const EmailService = {
           </td></tr>
         </table>
       </body></html>
-    `
+    `;
   },
-}
+};

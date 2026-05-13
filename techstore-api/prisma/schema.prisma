@@ -164,6 +164,21 @@ model EmailVerification {
   @@map("email_verifications")
 }
 
+// Códigos promocionales administrables desde el panel
+model PromoCode {
+  id         String   @id @default(cuid())
+  code       String   @unique   // Ej: TECHSTORE10
+  discount   Float              // Porcentaje: 0.10 = 10%
+  isActive   Boolean  @default(true)
+  maxUses    Int?               // null = ilimitado
+  usedCount  Int      @default(0)
+  expiresAt  DateTime?          // null = sin expiración
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("promo_codes")
+}
+
 // Producto favorito del usuario
 model Favorite {
   id        String   @id @default(cuid())

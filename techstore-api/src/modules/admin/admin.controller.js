@@ -6,6 +6,7 @@ import * as dashboardService   from './admin.service.js'
 import * as usersService       from './admin-users.service.js'
 import * as categoriesService  from './admin-categories.service.js'
 import * as ordersService      from './admin-orders.service.js'
+import * as promoService       from '../orders/promo.service.js'
 
 const paginationSchema = z.object({
   page:   z.coerce.number().int().min(1).default(1),
