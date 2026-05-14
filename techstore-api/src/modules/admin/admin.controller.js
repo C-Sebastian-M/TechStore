@@ -99,3 +99,39 @@ export async function patchOrderStatus(req, res, next) {
     res.json(await ordersService.setOrderStatus(req.params.id, status))
   } catch (err) { next(err) }
 }
+
+// ─── CÓDIGOS PROMOCIONALES ────────────────────────────────────────────────────
+export async function getPromos(req, res, next) {
+  try { res.json(await promoService.listPromoCodes()) }
+  catch (err) { next(err) }
+}
+
+export async function postPromo(req, res, next) {
+  try {
+    const data = z.object({
+      code:      z.string().min(2).max(20),
+      discount:  z.number().min(0).max(100),
+      maxUses:   z.number().int().min(1).optional().nullable(),
+      expiresAt: z.coerce.date().optional().nullable(),
+    }).parse(req.body)
+    res.status(201).json(await promoService.createPromoCode(data))
+  } catch (err) { next(err) }
+}
+
+export async function putPromo(req, res, next) {
+  try {
+    const data = z.object({
+      code:      z.string().min(2).max(20).optional(),
+      discount:  z.number().min(0).max(100).optional(),
+      maxUses:   z.number().int().min(1).optional().nullable(),
+      expiresAt: z.coerce.date().optional().nullable(),
+      isActive:  z.boolean().optional(),
+    }).parse(req.body)
+    res.json(await promoService.updatePromoCode(req.params.id, data))
+  } catch (err) { next(err) }
+}
+
+export async function deletePromo(req, res, next) {
+  try { res.json(await promoService.deletePromoCode(req.params.id)) }
+  catch (err) { next(err) }
+}

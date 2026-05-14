@@ -10,8 +10,10 @@ Monorepo with two packages:
 ## Backend — key facts
 
 ### Entrypoint and module loading
-- `src/server.js` uses **dynamic `await import()`** for all modules. If you add a new module you must add an import there.
+- `src/server.js` uses **dynamic `await import()`** for all modules inside a try-catch. If you add a new module you **must** add an import there (lines 15-24).
+- This pattern captures module errors at startup, failing fast with clear error messages (`❌ ERROR AL IMPORTAR MÓDULOS`).
 - Server middleware order is fixed: helmet → cors → parsers → rate-limit → routes → notFound → errorHandler.
+- Each module (auth, products, orders, admin, contact, upload) mounts at its own `/api/*` prefix in lines 105-110.
 
 ### Architecture pattern
 ```
@@ -55,9 +57,10 @@ Each module in `src/modules/*/` owns its routes, controller, and service. There 
 ```bash
 # API
 npm run dev              # node --watch src/server.js
-npm test                 # node --test
+npm test                 # node --test (see app.test.js for patterns)
 npm run db:migrate       # prisma migrate dev
-npm run db:seed          # node prisma/seed.js
+npm run db:seed          # node prisma/seed.js (base categories + users)
+npm run db:seed-personal # node prisma/seed-personal.js
 npm run db:studio        # prisma studio
 npm run db:reset         # prisma migrate reset --force
 
@@ -66,10 +69,34 @@ npm run dev              # vite dev server (port 5173 by default)
 npm run build            # vite build
 ```
 
+### Testing patterns
+- Uses Node.js built-in `test` module + `supertest` for HTTP testing
+- File: `app.test.js` shows patterns: `describe` → `test` → `supertest(app).get/post(...)`
+- Key: Always test protected routes with `.expect(401)` and validate response shape
+- Services are not unit-tested; focus on integration tests via API routes
+
+### Environment setup
+Create a `.env` file in `techstore-api/` (copy from prod settings):
+```
+DATABASE_URL=postgresql://user:pass@localhost:5432/techstore_dev
+JWT_SECRET=your-secret-here
+JWT_EXPIRES_IN=1d
+FRONTEND_URL=http://localhost:5173
+RECAPTCHA_SECRET=your-recaptcha-secret (optional for dev)
+SMTP_FROM=noreply@techstore.local (optional)
+```
+
 ### Business constants (must match backend)
 Both sides define the same constants independently:
 - API: `order.service.js` — TAX_RATE (0.19), SHIPPING_COST, FREE_SHIPPING_THRESHOLD, PROMO_CODES
 - Frontend: `config/constants.js` — same values; must keep in sync
+- ⚠️ Recent refactoring (commit e4360fb) removed validators services; validators now live inline in controllers with Zod schemas
+
+### Recent patterns to know
+- **Promo code management** — `promo.service.js` handles validation & discount calculation; always validate codes server-side
+- **Validators refactoring** — As of latest commits, Zod schemas are in `*.validators.js` but validators services layer was removed. Controllers call Zod directly.
+- **Google OAuth** — Auth supports both traditional password + Google OAuth; `googleAuth` boolean on User model flags OAuth-registered users
+- **Module loading robustness** — Dynamic imports fail with clear stack traces (not silent failures); always check server startup logs if a new module doesn't load
 
 ## Frontend — key facts
 
@@ -87,6 +114,12 @@ Both sides define the same constants independently:
 ### Services
 Services are in `features/*/services/` and use `axios` (from `src/services/api.js`). Base URL from `VITE_API_URL` env (default `http://localhost:3001`).
 
+### Common service patterns to follow
+- Services export async functions, not classes (e.g., `export const getProducts = async (params) => ...`)
+- All API errors are caught and re-thrown with user-friendly messages
+- Services live in `features/*/services/`, shared helpers in `src/services/`
+- Contexts live in `features/*/context/` (not shared globally unless truly universal like Auth)
+
 ### Tailwind CSS v4
 Uses `@tailwindcss/vite` plugin (Tailwind v4, not v3). Config is done via CSS `@import "tailwindcss"` in `index.css`, **not** via `tailwind.config.js`.
 
@@ -95,3 +128,17 @@ Uses `@tailwindcss/vite` plugin (Tailwind v4, not v3). Config is done via CSS `@
 - Shared UI components in `components/ui/` or `shared/components/ui/`
 - Feature-specific components in `features/*/components/`
 - Barrel re-exports in `features/*/index.js`
+
+## Common pitfalls for AI agents
+
+**Backend**
+- Don't create new modules without adding imports in `src/server.js` (lines 15-24) — the server won't load them
+- Don't call `jsonwebtoken` or `bcryptjs` directly — use `TokenService` and `PasswordService` wrappers
+- Don't forget to extend `AppError` for new error types; don't use generic `Error()` + manual statusCode
+- When adding promo code logic, validate codes server-side; client can't be trusted
+
+**Frontend**
+- Don't hardcode routes — use `ROUTES` object from `config/routes.js`
+- Don't replicate cart or auth logic — they live in contexts and are singleton-like
+- Tailwind is v4 (CSS config via `index.css`, not `tailwind.config.js`)
+- When adding pages, check if they should live in `pages/`, `pages/{feature}/`, or `features/{feature}/pages/` based on whether they're feature-scoped
