@@ -1,3 +1,19 @@
+// ─── AuthContext ─────────────────────────────────────────────────────────────
+// Provee el estado de sesión a toda la aplicación.
+//
+// Expone:
+//   user             — objeto de usuario autenticado (null si no hay sesión)
+//   loading          — true mientras se restaura la sesión del localStorage
+//   isAuthenticated  — atajo booleano de !!user
+//   authModal        — estado del modal de login/registro { open, tab }
+//   openLogin/openRegister/closeAuth — control del modal
+//   login/register/verifyEmail/loginWithGoogle/logout — acciones de sesión
+//   refreshUser      — recarga el perfil desde la API (útil tras editar datos)
+//
+// Flujo de registro (2 pasos):
+//   1. register() → envía código al email
+//   2. verifyEmail() → verifica el código y crea la cuenta
+
 import { createContext, useContext, useState, useEffect } from 'react'
 import * as authService from '../services/authService.js'
 

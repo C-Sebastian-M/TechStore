@@ -1,3 +1,19 @@
+// ─── CartContext ─────────────────────────────────────────────────────────────
+// Gestiona el carrito de compras con persistencia aislada por usuario.
+//
+// PERSISTENCIA:
+//   — Usuario autenticado: localStorage con clave 'cart_<userId>'
+//     • Sobrevive navegación, recarga y cierre de pestaña
+//     • Se restaura al volver a loguear con la misma cuenta
+//     • Al hacer logout la memoria se vacía; el dato persiste en localStorage
+//   — Guest (sin sesión): solo en memoria de React, no se persiste
+//   — Cambio de cuenta: al cambiar userId se carga el carrito del nuevo usuario
+//
+// TOTALES (calculados en cartService.js):
+//   subtotal, discount, discountedSubtotal, tax (19% IVA), shipping, total, itemCount
+//   Envio gratis si subtotal descontado >= FREE_SHIPPING_THRESHOLD ($150)
+//   Carrito vacío siempre tiene shipping = $0
+
 import {
   createContext,
   useContext,
