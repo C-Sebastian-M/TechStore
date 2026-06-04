@@ -25,4 +25,10 @@ router.get  ('/orders',            ctrl.getOrders)
 router.get  ('/orders/:id',        ctrl.getOrder)
 router.patch('/orders/:id/status', ctrl.patchOrderStatus)
 
+// ─── CÓDIGOS PROMOCIONALES ────────────────────────────────────────────────────
+router.get   ('/promos',     ctrl.getPromos)
+router.post  ('/promos',     ctrl.postPromo)
+router.put   ('/promos/:id', ctrl.putPromo)
+router.delete('/promos/:id', ctrl.deletePromo)
+
 export default router

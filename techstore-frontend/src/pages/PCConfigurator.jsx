@@ -268,11 +268,12 @@ function ComponentDrawer({ slotId, onClose, onSelect, currentSelected, component
 
 function BlueprintDiagram({ selection, activeSlot, onSlotClick }) {
   return (
-    <div className="relative w-full" style={{ paddingBottom: '70%' }}>
-      <div className="absolute inset-0">
+    <div className="relative w-full bg-gradient-to-b from-blue-950/10 to-transparent" style={{ paddingBottom: 'max(80%, 400px)' }}>
+      <div className="absolute inset-0 w-full h-full overflow-hidden">
         <svg
           viewBox="0 0 100 70"
           className="w-full h-full"
+          preserveAspectRatio="xMidYMid meet"
           style={{ background: 'radial-gradient(ellipse at 50% 50%, #0d1f35 0%, #0a1520 100%)' }}
         >
           <defs>
